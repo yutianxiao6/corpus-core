@@ -41,3 +41,18 @@ mypy src
 ```
 
 可跟踪实施计划见 [docs/tasks.md](docs/tasks.md)。
+
+配置、插件和开发说明分别见 [docs/configuration.md](docs/configuration.md)、[docs/plugins.md](docs/plugins.md) 和 [docs/development.md](docs/development.md)。
+
+文件发现、TXT/Markdown 加载与安全规则见 [docs/ingestion.md](docs/ingestion.md)。
+
+## CLI 快速开始
+
+```bash
+rag-index init ./my-rag
+rag-index preview ./documents --show-content
+rag-index --config rag.yaml build ./documents --json
+rag-index --config rag.yaml query "如何离线安装？" --profile fast --json
+```
+
+`build` 和 `query` 只读取配置指定的本地模型，不会自动下载。Python 查询接口、Qdrant Local 限制和引用结果见 [docs/querying.md](docs/querying.md)。

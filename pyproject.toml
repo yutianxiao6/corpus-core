@@ -57,3 +57,15 @@ line-length = 100
 [tool.mypy]
 python_version = "3.11"
 strict = true
+
+[[tool.mypy.overrides]]
+module = ["langchain_text_splitters", "langchain_text_splitters.*"]
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+module = ["sentence_transformers", "sentence_transformers.*"]
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+module = ["qdrant_client", "qdrant_client.*"]
+follow_imports = "skip"

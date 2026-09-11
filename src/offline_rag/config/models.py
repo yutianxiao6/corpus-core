@@ -72,7 +72,7 @@ class RecursiveChunkProfile(StrictModel):
     type: Literal["recursive"]
     chunk_size: int = Field(default=800, gt=0)
     chunk_overlap: int = Field(default=120, ge=0)
-    length_unit: Literal["character", "token"] = "token"
+    length_unit: Literal["character", "token"] = "character"
     minimum_size: int = Field(default=80, ge=0)
 
     @model_validator(mode="after")

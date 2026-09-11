@@ -38,6 +38,10 @@ class UnsupportedDocumentError(OfflineRagError):
     code = "unsupported_document"
 
 
+class SourceDiscoveryError(OfflineRagError):
+    code = "source_discovery_error"
+
+
 class DocumentLoadError(OfflineRagError):
     code = "document_load_error"
 

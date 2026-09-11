@@ -13,8 +13,8 @@
 
 | 优先级 | 已完成 | 进行中 | 未开始 |
 |---|---:|---:|---:|
-| P0 | 11 | 0 | 2 |
-| P1 | 0 | 0 | 20 |
+| P0 | 13 | 0 | 0 |
+| P1 | 20 | 0 | 0 |
 | P2 | 0 | 0 | 19 |
 | P3 | 0 | 0 | 10 |
 
@@ -42,7 +42,7 @@
 - [x] `P0-008` 实现组件 Protocol 与泛型注册表。
   - 依赖：P0-004、P0-006。
   - 验收：loader、parser、chunker、processor、embedding、vector store、strategy、organizer 可注册和解析。
-- [ ] `P0-009` 实现 Python entry point 插件发现。
+- [x] `P0-009` 实现 Python entry point 插件发现。
   - 依赖：P0-008。
   - 验收：只加载显式启用的已安装插件；重复名和错误插件有清晰错误。
 - [x] `P0-010` 建立标准库单元测试基线。
@@ -54,31 +54,31 @@
 - [x] `P0-012` 确定依赖与锁定策略。
   - 依赖：P0-003。
   - 验收：区分 core、qdrant、embedding、document、ocr、dev extras，并产生可重复 lock。
-- [ ] `P0-013` 编写配置、插件和开发者文档骨架。
+- [x] `P0-013` 编写配置、插件和开发者文档骨架。
   - 依赖：P0-007、P0-009。
 
 ## P1：最小可用索引链路
 
-- [ ] `P1-001` 实现目录和显式文件发现器。
-- [ ] `P1-002` 实现 glob、ignore、隐藏文件和软链接安全规则。
-- [ ] `P1-003` 实现 TXT loader 与编码处理。
-- [ ] `P1-004` 实现 Markdown loader/parser 和标题 blocks。
-- [ ] `P1-005` 实现基础 Unicode、换行和空白标准化。
-- [ ] `P1-006` 实现 Recursive chunker。
-- [ ] `P1-007` 实现 Heading Recursive chunker。
-- [ ] `P1-008` 实现短块合并、超长块强制拆分和空块删除。
-- [ ] `P1-009` 实现 embedding_text 标题上下文注入。
-- [ ] `P1-010` 实现稳定 document/chunk ID 与相邻关系。
-- [ ] `P1-011` 实现 Qwen3 SentenceTransformers embedding 适配器。
-- [ ] `P1-012` 校验 query instruction 与 document 编码分离。
-- [ ] `P1-013` 实现索引指纹计算与兼容性检查。
-- [ ] `P1-014` 实现 Qdrant Local VectorStorePort。
-- [ ] `P1-015` 实现 dense similarity 查询策略。
-- [ ] `P1-016` 实现 FlatOrganizer。
-- [ ] `P1-017` 实现 ContextOrganizer 和引用映射。
-- [ ] `P1-018` 实现 `rag-index preview/build/query/doctor`。
-- [ ] `P1-019` 完成 TXT/Markdown 端到端离线测试。
-- [ ] `P1-020` 建立最小检索评测 fixture 和 Recall@K。
+- [x] `P1-001` 实现目录和显式文件发现器。
+- [x] `P1-002` 实现 glob、ignore、隐藏文件和软链接安全规则。
+- [x] `P1-003` 实现 TXT loader 与编码处理。
+- [x] `P1-004` 实现 Markdown loader/parser 和标题 blocks。
+- [x] `P1-005` 实现基础 Unicode、换行和空白标准化。
+- [x] `P1-006` 实现 Recursive chunker。
+- [x] `P1-007` 实现 Heading Recursive chunker。
+- [x] `P1-008` 实现短块合并、超长块强制拆分和空块删除。
+- [x] `P1-009` 实现 embedding_text 标题上下文注入。
+- [x] `P1-010` 实现稳定 document/chunk ID 与相邻关系。
+- [x] `P1-011` 实现 Qwen3 SentenceTransformers embedding 适配器。
+- [x] `P1-012` 校验 query instruction 与 document 编码分离。
+- [x] `P1-013` 实现索引指纹计算与兼容性检查。
+- [x] `P1-014` 实现 Qdrant Local VectorStorePort。
+- [x] `P1-015` 实现 dense similarity 查询策略。
+- [x] `P1-016` 实现 FlatOrganizer。
+- [x] `P1-017` 实现 ContextOrganizer 和引用映射。
+- [x] `P1-018` 实现 `rag-index preview/build/query/doctor`。
+- [x] `P1-019` 完成 TXT/Markdown 端到端离线测试。
+- [x] `P1-020` 建立最小检索评测 fixture 和 Recall@K。
 
 ## P2：可靠导入与完整检索
 

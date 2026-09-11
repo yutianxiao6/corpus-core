@@ -1,0 +1,127 @@
+"""High-level reusable indexing and retrieval module."""
+
+from __future__ import annotations
+
+import time
+from pathlib import Path
+from typing import Self
+
+from offline_rag.config.models import OrganizerConfig, RagConfig
+from offline_rag.contracts.indexing import IngestionReport
+from offline_rag.contracts.retrieval import (
+    ContextBudget,
+    RetrievalOptions,
+    RetrievalRequest,
+    RetrievalResult,
+)
+from offline_rag.embeddings import QwenSentenceTransformerEmbedding
+from offline_rag.ingestion import IngestionService, PreviewReport, build_index_specification
+from offline_rag.organizers import ContextOrganizer, FlatOrganizer
+from offline_rag.retrieval import DenseSimilarityStrategy
+from offline_rag.vectorstores import QdrantLocalVectorStore
+
+
+class OfflineRagEngine:
+    """Library facade used by the CLI and downstream company QA applications."""
+
+    def __init__(self, config: RagConfig) -> None:
+        if config.vector_store.mode != "local" or config.vector_store.path is None:
+            raise ValueError("P1 engine currently supports Qdrant Local mode only")
+        self.config = config
+        embedding_config = config.embedding
+        self.embedding = QwenSentenceTransformerEmbedding(
+            embedding_config.model_path,
+            revision=embedding_config.model_revision or "pinned-local",
+            dimension=embedding_config.dimension,
+            normalize=embedding_config.normalize,
+            batch_size=embedding_config.batch_size,
+            max_length=embedding_config.max_length,
+            query_instruction=embedding_config.query_instruction,
+            device=embedding_config.device,
+        )
+        self.vector_store = QdrantLocalVectorStore(
+            config.vector_store.path,
+            collection_name=config.vector_store.collection_alias,
+        )
+        self.index_specification = build_index_specification(config, self.embedding.specification)
+        self.ingestion = IngestionService(
+            config,
+            embedding=self.embedding,
+            vector_store=self.vector_store,
+            token_counter=self.embedding.count_tokens,
+        )
+
+    @classmethod
+    def from_config(cls, config: RagConfig) -> OfflineRagEngine:
+        return cls(config)
+
+    def preview(self, *inputs: str | Path) -> PreviewReport:
+        return IngestionService(self.config, token_counter=self.embedding.count_tokens).preview(
+            inputs
+        )
+
+    def build(self, *inputs: str | Path) -> IngestionReport:
+        return self.ingestion.build(inputs, self.index_specification)
+
+    def query(self, query: str, *, profile: str = "fast") -> RetrievalResult:
+        started = time.perf_counter()
+        try:
+            retrieval_profile = self.config.retrieval_profiles[profile]
+        except KeyError as exc:
+            raise ValueError(f"unknown retrieval profile: {profile}") from exc
+        if retrieval_profile.strategy != "dense":
+            raise ValueError("P1 engine currently supports dense retrieval profiles only")
+        self.vector_store.ensure_index(self.index_specification)
+        options = RetrievalOptions(
+            profile=profile,
+            final_k=retrieval_profile.final_k,
+            organizer=retrieval_profile.organizer,
+        )
+        candidates = DenseSimilarityStrategy(
+            self.embedding,
+            self.vector_store,
+            fetch_k=retrieval_profile.fetch_k or retrieval_profile.final_k,
+        ).retrieve(RetrievalRequest(query, options))
+        retrieved_at = time.perf_counter()
+        organizer_config = self.config.organizers.get(retrieval_profile.organizer)
+        budget = self._budget(organizer_config)
+        organizer = (
+            ContextOrganizer()
+            if organizer_config is not None and organizer_config.type == "context"
+            else FlatOrganizer()
+        )
+        organized = organizer.organize(query, candidates, budget)
+        finished = time.perf_counter()
+        return RetrievalResult(
+            query=query,
+            processed_query=query.strip(),
+            hits=organized.hits,
+            context=organized.context,
+            citations=organized.citations,
+            index_version=self.index_specification.fingerprint()[:16],
+            embedding_fingerprint=self.embedding.specification.fingerprint(),
+            timings_ms={
+                "retrieve": (retrieved_at - started) * 1000,
+                "organize": (finished - retrieved_at) * 1000,
+                "total": (finished - started) * 1000,
+            },
+            warnings=organized.warnings,
+        )
+
+    @staticmethod
+    def _budget(config: OrganizerConfig | None) -> ContextBudget:
+        if config is None:
+            return ContextBudget(max_characters=1_000_000)
+        return ContextBudget(
+            max_tokens=config.max_context_tokens,
+            maximum_chunks_per_document=config.maximum_chunks_per_document,
+        )
+
+    def close(self) -> None:
+        self.vector_store.close()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.close()
