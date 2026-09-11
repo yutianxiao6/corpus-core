@@ -59,6 +59,7 @@ class LangChainAdapterTests(unittest.IsolatedAsyncioTestCase):
     async def test_invoke_and_ainvoke_return_standard_serializable_documents(self) -> None:
         engine = Mock(spec=OfflineRagEngine)
         engine.query.return_value = native_result()
+        engine.aquery.return_value = native_result()
         overrides = QueryOverrides(filters={"metadata.department": "support"})
         retriever = OfflineRagLangChainRetriever(
             engine=engine,
@@ -77,6 +78,7 @@ class LangChainAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(async_documents, documents)
         json.dumps(documents[0].metadata, ensure_ascii=False)
         engine.query.assert_called_with("退款", profile="balanced", overrides=overrides)
+        engine.aquery.assert_awaited_once_with("退款", profile="balanced", overrides=overrides)
 
     async def test_engine_factory_validates_profile(self) -> None:
         engine = object.__new__(OfflineRagEngine)

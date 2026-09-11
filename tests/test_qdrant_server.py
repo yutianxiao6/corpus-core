@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
-from qdrant_client import QdrantClient
+from qdrant_client import AsyncQdrantClient, QdrantClient
+from qdrant_client.http import models
 
 from offline_rag.contracts.chunks import Chunk
 from offline_rag.contracts.indexing import (
@@ -49,11 +50,13 @@ def record(chunk_id: str) -> VectorRecord:
 class QdrantServerTests(unittest.TestCase):
     def test_server_adapter_uses_same_staging_alias_and_query_contract(self) -> None:
         client = QdrantClient(":memory:")
+        async_client = AsyncMock(spec=AsyncQdrantClient)
         try:
             store = QdrantServerVectorStore(
                 "http://qdrant.internal:6333",
                 collection_name="active",
                 client=client,
+                async_client=async_client,
             )
             staging = store.create_staging(specification(), version="v1")
             self.assertIsInstance(staging, QdrantServerVectorStore)
@@ -68,7 +71,11 @@ class QdrantServerTests(unittest.TestCase):
             client.close()
 
     def test_client_configuration_disables_cloud_inference(self) -> None:
-        with patch("offline_rag.vectorstores.qdrant_server.QdrantClient") as factory:
+        with (
+            patch("offline_rag.vectorstores.qdrant_server.QdrantClient") as factory,
+            patch("offline_rag.vectorstores.qdrant_server.AsyncQdrantClient") as async_factory,
+        ):
+            async_factory.return_value.close = AsyncMock()
             store = QdrantServerVectorStore(
                 "https://qdrant.internal",
                 api_key="secret",
@@ -85,6 +92,45 @@ class QdrantServerTests(unittest.TestCase):
         self.assertEqual(options["timeout"], 9)
         self.assertEqual(options["pool_size"], 20)
         self.assertIs(options["cloud_inference"], False)
+        self.assertIs(options["check_compatibility"], False)
+        self.assertEqual(async_factory.call_args.kwargs, options)
+
+
+class QdrantServerAsyncTests(unittest.IsolatedAsyncioTestCase):
+    async def test_native_async_search_and_fetch_preserve_contract(self) -> None:
+        client = QdrantClient(":memory:")
+        async_client = AsyncMock(spec=AsyncQdrantClient)
+        payload = chunk_to_payload(
+            Chunk(
+                chunk_id="chunk-1",
+                document_id="doc",
+                content="async server content",
+                embedding_text="async server content",
+                source_uri="file:///async.txt",
+                chunk_index=0,
+            )
+        )
+        payload["chunk_id"] = "chunk-1"
+        async_client.query_points.return_value = models.QueryResponse(
+            points=[models.ScoredPoint(id=1, version=0, score=0.9, payload=payload)]
+        )
+        async_client.retrieve.return_value = [models.Record(id=1, payload=payload)]
+        store = QdrantServerVectorStore(
+            "http://qdrant.internal:6333",
+            client=client,
+            async_client=async_client,
+        )
+        try:
+            hits = await store.asearch(SearchRequest([1.0, 0.0], limit=1))
+            fetched = await store.afetch(["chunk-1"])
+        finally:
+            await store.aclose()
+            client.close()
+
+        self.assertEqual(hits[0].score, 0.9)
+        self.assertEqual(fetched[0].chunk_id, "chunk-1")
+        async_client.query_points.assert_awaited_once()
+        async_client.retrieve.assert_awaited_once()
 
 
 if __name__ == "__main__":

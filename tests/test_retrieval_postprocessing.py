@@ -68,6 +68,9 @@ class StoreFixture:
             if chunk_id in self.chunks
         )
 
+    async def afetch(self, chunk_ids: Sequence[str]) -> Sequence[SearchHit]:
+        return self.fetch(chunk_ids)
+
 
 class RetrievalPostprocessingTests(unittest.TestCase):
     def test_threshold_and_per_document_limit_reset_ranks(self) -> None:
@@ -115,6 +118,21 @@ class RetrievalPostprocessingTests(unittest.TestCase):
         self.assertTrue(all(item.rank is None for item in neighbors))
         self.assertTrue(all(item.origins == ["neighbor"] for item in neighbors))
         self.assertLessEqual(len(store.requests), 2)
+
+
+class AsyncRetrievalPostprocessingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_async_neighbor_expansion_matches_sync_order(self) -> None:
+        chunks = [
+            make_candidate("one", 0, next_id="two").chunk,
+            make_candidate("two", 0, previous_id="one", next_id="three").chunk,
+            make_candidate("three", 0, previous_id="two").chunk,
+        ]
+        store = StoreFixture(chunks)
+        seed = make_candidate("two", 0.95, previous_id="one", next_id="three")
+
+        result = await NeighborExpander(store).aexpand([seed], distance=1)
+
+        self.assertEqual([item.chunk.chunk_id for item in result], ["one", "two", "three"])
 
 
 if __name__ == "__main__":

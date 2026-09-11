@@ -49,6 +49,24 @@ documents = await retriever.ainvoke("退款条件是什么？")
 
 每个 LangChain `Document` 的 `page_content` 是候选正文；metadata 包含 chunk/document/source/page、dense/sparse/fusion/rerank/final 分数、rank、origins、索引版本、embedding 指纹、原始 source metadata 和可用的 citation。metadata 会转换为普通 JSON 结构。适配器不拥有 engine 生命周期，应用关闭时仍由调用方关闭 engine。
 
+原生接口提供行为一致的同步、异步与批量查询；批量结果顺序与输入查询严格一致：
+
+```python
+result = engine.retrieve("退款条件是什么？", profile="balanced")
+result = await engine.aretrieve("退款条件是什么？", profile="balanced")
+
+overrides = QueryOverrides(filters={"metadata.department": "support"}, final_k=5)
+results = engine.batch_retrieve(queries, profile="balanced", overrides=overrides)
+results = await engine.abatch_retrieve(queries, profile="balanced", overrides=overrides)
+```
+
+`aquery`/`aretrieve` 使用异步 embedding、reranker、Qdrant search/fetch，不会在线程中执行整条同步查询。异步 context manager 会关闭同步与异步数据库连接：
+
+```python
+async with OfflineRagEngine.from_config(config) as engine:
+    result = await engine.aretrieve("退款条件是什么？")
+```
+
 `RetrievalResult` 同时返回排序后的 chunk、阶段耗时、索引版本和 embedding 指纹。使用 Context organizer 时还会返回可直接交给上层 LLM 的 context 与结构化 citations。
 
 Qdrant Local 只适合单进程 CLI、预览和开发。同一个进程复用同一 `QdrantLocalVectorStore`；公司问答服务的多进程并发接入使用 `vector_store.mode: server`，每个应用进程连接同一个内网 Qdrant 服务与 active alias。

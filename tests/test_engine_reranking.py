@@ -32,10 +32,14 @@ class EmbeddingFixture:
     def embed_query(self, text: str) -> Vector:
         return (1.0, 0.0)
 
+    async def aembed_query(self, text: str) -> Vector:
+        return self.embed_query(text)
+
 
 class StoreFixture:
     def __init__(self) -> None:
         self.requests: list[SearchRequest] = []
+        self.async_searches = 0
 
     def ensure_index(self, specification: IndexSpecification) -> None:
         self.specification = specification
@@ -43,6 +47,16 @@ class StoreFixture:
     def search(self, request: SearchRequest) -> Sequence[SearchHit]:
         self.requests.append(request)
         return tuple(self._hit(name, score) for name, score in (("a", 0.9), ("b", 0.8), ("c", 0.7)))
+
+    async def asearch(self, request: SearchRequest) -> Sequence[SearchHit]:
+        self.async_searches += 1
+        return self.search(request)
+
+    def fetch(self, chunk_ids: Sequence[str]) -> Sequence[SearchHit]:
+        return ()
+
+    async def afetch(self, chunk_ids: Sequence[str]) -> Sequence[SearchHit]:
+        return self.fetch(chunk_ids)
 
     @staticmethod
     def _hit(chunk_id: str, score: float) -> SearchHit:
@@ -89,6 +103,26 @@ class FailingReranker(ReverseReranker):
         top_n: int | None = None,
     ) -> Sequence[RetrievalCandidate]:
         raise RerankerError("fixture failure")
+
+
+class AsyncOnlyReranker(ReverseReranker):
+    def rerank(
+        self,
+        query: str,
+        candidates: Sequence[RetrievalCandidate],
+        *,
+        top_n: int | None = None,
+    ) -> Sequence[RetrievalCandidate]:
+        raise AssertionError("sync reranker must not be called by aquery")
+
+    async def arerank(
+        self,
+        query: str,
+        candidates: Sequence[RetrievalCandidate],
+        *,
+        top_n: int | None = None,
+    ) -> Sequence[RetrievalCandidate]:
+        return ReverseReranker.rerank(self, query, candidates, top_n=top_n)
 
 
 def make_engine(
@@ -176,6 +210,29 @@ class EngineRerankingTests(unittest.TestCase):
         engine, _store = make_engine()
         with self.assertRaisesRegex(ValueError, "unknown organizer"):
             engine.retrieve("query", profile="precise", organizer="missing")
+
+
+class AsyncEngineRerankingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_async_pipeline_uses_async_strategy_and_reranker(self) -> None:
+        engine, store = make_engine()
+        engine._reranker_cache["local"] = AsyncOnlyReranker()
+
+        result = await engine.aquery("query", profile="precise")
+
+        self.assertEqual(store.async_searches, 1)
+        self.assertEqual([item.chunk.chunk_id for item in result.hits], ["c", "b"])
+
+    async def test_sync_and_async_batches_preserve_input_order(self) -> None:
+        engine, _store = make_engine()
+        engine._reranker_cache["local"] = ReverseReranker()
+
+        sync_results = engine.batch_retrieve(["first", "second"], profile="precise")
+        async_results = await engine.abatch_retrieve(["third", "fourth"], profile="precise")
+
+        self.assertEqual([result.query for result in sync_results], ["first", "second"])
+        self.assertEqual([result.query for result in async_results], ["third", "fourth"])
+        self.assertEqual(engine.batch_retrieve([], profile="precise"), ())
+        self.assertEqual(await engine.abatch_retrieve([], profile="precise"), ())
 
 
 if __name__ == "__main__":

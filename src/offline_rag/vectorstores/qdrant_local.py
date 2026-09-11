@@ -301,6 +301,12 @@ class QdrantLocalVectorStore:
     async def asearch(self, request: SearchRequest) -> Sequence[SearchHit]:
         return await asyncio.to_thread(self.search, request)
 
+    async def afetch(self, chunk_ids: Sequence[str]) -> Sequence[SearchHit]:
+        return await asyncio.to_thread(self.fetch, chunk_ids)
+
+    async def aclose(self) -> None:
+        self.close()
+
     def close(self) -> None:
         if self._owns_client:
             with self._lock:

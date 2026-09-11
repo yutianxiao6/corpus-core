@@ -5,7 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import cast
 
-from langchain_core.callbacks import CallbackManagerForRetrieverRun
+from langchain_core.callbacks import (
+    AsyncCallbackManagerForRetrieverRun,
+    CallbackManagerForRetrieverRun,
+)
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from pydantic import Field, field_validator
@@ -36,6 +39,20 @@ class OfflineRagLangChainRetriever(BaseRetriever):  # type: ignore[misc]
     ) -> list[Document]:
         del run_manager
         result = self.engine.query(
+            query,
+            profile=self.profile,
+            overrides=cast(QueryOverrides, self.overrides),
+        )
+        return self._documents(result)
+
+    async def _aget_relevant_documents(
+        self,
+        query: str,
+        *,
+        run_manager: AsyncCallbackManagerForRetrieverRun,
+    ) -> list[Document]:
+        del run_manager
+        result = await self.engine.aquery(
             query,
             profile=self.profile,
             overrides=cast(QueryOverrides, self.overrides),

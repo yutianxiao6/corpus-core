@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import math
 from collections.abc import Sequence
 from dataclasses import replace
 
+from offline_rag.contracts.chunks import Chunk
 from offline_rag.contracts.retrieval import RetrievalCandidate
 from offline_rag.ports import EmbeddingProvider, Vector, VectorStorePort
 from offline_rag.vectorstores.payloads import chunk_from_payload
@@ -88,6 +90,22 @@ class MaximalMarginalRelevanceSelector:
             remaining.remove(best)
         return _ranked([candidates[index] for index in selected])
 
+    async def aselect(
+        self,
+        query: str,
+        candidates: Sequence[RetrievalCandidate],
+        *,
+        limit: int,
+        relevance_weight: float,
+    ) -> tuple[RetrievalCandidate, ...]:
+        return await asyncio.to_thread(
+            self.select,
+            query,
+            candidates,
+            limit=limit,
+            relevance_weight=relevance_weight,
+        )
+
 
 class NeighborExpander:
     def __init__(self, vector_store: VectorStorePort) -> None:
@@ -115,47 +133,103 @@ class NeighborExpander:
             )
             for hit in self._vector_store.fetch(needed):
                 cache[hit.chunk_id] = chunk_from_payload(hit.payload)
-            for position, chunk_id in enumerate(previous_frontier):
-                chunk = cache.get(chunk_id) if chunk_id else None
-                if chunk is None:
-                    previous_frontier[position] = None
-                    continue
-                previous_paths[position].append(chunk.chunk_id)
-                previous_frontier[position] = chunk.previous_id
-            for position, chunk_id in enumerate(next_frontier):
-                chunk = cache.get(chunk_id) if chunk_id else None
-                if chunk is None:
-                    next_frontier[position] = None
-                    continue
-                next_paths[position].append(chunk.chunk_id)
-                next_frontier[position] = chunk.next_id
-        primary_ids = {candidate.chunk.chunk_id for candidate in candidates}
-        seen: set[str] = set()
-        expanded: list[RetrievalCandidate] = []
-        for position, candidate in enumerate(candidates):
-            ordered_ids = (
-                *reversed(previous_paths[position]),
-                candidate.chunk.chunk_id,
-                *next_paths[position],
+            _advance_frontiers(
+                cache,
+                previous_frontier,
+                next_frontier,
+                previous_paths,
+                next_paths,
             )
-            for chunk_id in ordered_ids:
-                if chunk_id in seen or (
-                    chunk_id in primary_ids and chunk_id != candidate.chunk.chunk_id
-                ):
-                    continue
-                seen.add(chunk_id)
-                if chunk_id == candidate.chunk.chunk_id:
-                    expanded.append(candidate)
-                else:
-                    expanded.append(
-                        RetrievalCandidate(
-                            chunk=cache[chunk_id],
-                            final_score=None,
-                            rank=None,
-                            origins=["neighbor"],
-                        )
+        return _expanded_candidates(candidates, cache, previous_paths, next_paths)
+
+    async def aexpand(
+        self, candidates: Sequence[RetrievalCandidate], *, distance: int
+    ) -> tuple[RetrievalCandidate, ...]:
+        if distance < 0:
+            raise ValueError("distance must be non-negative")
+        if distance == 0 or not candidates:
+            return tuple(candidates)
+        cache = {candidate.chunk.chunk_id: candidate.chunk for candidate in candidates}
+        previous_paths: list[list[str]] = [[] for _ in candidates]
+        next_paths: list[list[str]] = [[] for _ in candidates]
+        previous_frontier = [candidate.chunk.previous_id for candidate in candidates]
+        next_frontier = [candidate.chunk.next_id for candidate in candidates]
+        for _depth in range(distance):
+            needed = tuple(
+                dict.fromkeys(
+                    chunk_id
+                    for chunk_id in (*previous_frontier, *next_frontier)
+                    if chunk_id is not None and chunk_id not in cache
+                )
+            )
+            for hit in await self._vector_store.afetch(needed):
+                cache[hit.chunk_id] = chunk_from_payload(hit.payload)
+            _advance_frontiers(
+                cache,
+                previous_frontier,
+                next_frontier,
+                previous_paths,
+                next_paths,
+            )
+        return _expanded_candidates(candidates, cache, previous_paths, next_paths)
+
+
+def _advance_frontiers(
+    cache: dict[str, Chunk],
+    previous_frontier: list[str | None],
+    next_frontier: list[str | None],
+    previous_paths: list[list[str]],
+    next_paths: list[list[str]],
+) -> None:
+    for position, chunk_id in enumerate(previous_frontier):
+        chunk = cache.get(chunk_id) if chunk_id else None
+        if chunk is None:
+            previous_frontier[position] = None
+            continue
+        previous_paths[position].append(chunk.chunk_id)
+        previous_frontier[position] = chunk.previous_id
+    for position, chunk_id in enumerate(next_frontier):
+        chunk = cache.get(chunk_id) if chunk_id else None
+        if chunk is None:
+            next_frontier[position] = None
+            continue
+        next_paths[position].append(chunk.chunk_id)
+        next_frontier[position] = chunk.next_id
+
+
+def _expanded_candidates(
+    candidates: Sequence[RetrievalCandidate],
+    cache: dict[str, Chunk],
+    previous_paths: Sequence[Sequence[str]],
+    next_paths: Sequence[Sequence[str]],
+) -> tuple[RetrievalCandidate, ...]:
+    primary_ids = {candidate.chunk.chunk_id for candidate in candidates}
+    seen: set[str] = set()
+    expanded: list[RetrievalCandidate] = []
+    for position, candidate in enumerate(candidates):
+        ordered_ids = (
+            *reversed(previous_paths[position]),
+            candidate.chunk.chunk_id,
+            *next_paths[position],
+        )
+        for chunk_id in ordered_ids:
+            if chunk_id in seen or (
+                chunk_id in primary_ids and chunk_id != candidate.chunk.chunk_id
+            ):
+                continue
+            seen.add(chunk_id)
+            if chunk_id == candidate.chunk.chunk_id:
+                expanded.append(candidate)
+            else:
+                expanded.append(
+                    RetrievalCandidate(
+                        chunk=cache[chunk_id],
+                        final_score=None,
+                        rank=None,
+                        origins=["neighbor"],
                     )
-        return tuple(expanded)
+                )
+    return tuple(expanded)
 
 
 def _ranked(candidates: Sequence[RetrievalCandidate]) -> tuple[RetrievalCandidate, ...]:

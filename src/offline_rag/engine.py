@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import tempfile
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
@@ -18,7 +19,9 @@ from offline_rag.contracts.common import JSONValue
 from offline_rag.contracts.indexing import IngestionReport
 from offline_rag.contracts.retrieval import (
     ContextBudget,
+    OrganizedResult,
     QueryOverrides,
+    RetrievalCandidate,
     RetrievalOptions,
     RetrievalRequest,
     RetrievalResult,
@@ -227,17 +230,76 @@ class OfflineRagEngine:
         return self.query(
             query,
             profile=profile,
-            overrides=QueryOverrides(
-                filters=filters or {},
-                organizer=organizer,
-                final_k=final_k,
-                score_threshold=score_threshold,
-                rerank_top_n=rerank_top_n,
-                mmr_lambda=mmr_lambda,
-                mmr_fetch_k=mmr_fetch_k,
-                neighbor_expansion=neighbor_expansion,
-                maximum_chunks_per_document=maximum_chunks_per_document,
+            overrides=self._make_overrides(
+                filters,
+                organizer,
+                final_k,
+                score_threshold,
+                rerank_top_n,
+                mmr_lambda,
+                mmr_fetch_k,
+                neighbor_expansion,
+                maximum_chunks_per_document,
             ),
+        )
+
+    async def aretrieve(
+        self,
+        query: str,
+        *,
+        profile: str = "fast",
+        filters: Mapping[str, JSONValue] | None = None,
+        organizer: str | None = None,
+        final_k: int | None = None,
+        score_threshold: float | None = None,
+        rerank_top_n: int | None = None,
+        mmr_lambda: float | None = None,
+        mmr_fetch_k: int | None = None,
+        neighbor_expansion: int | None = None,
+        maximum_chunks_per_document: int | None = None,
+    ) -> RetrievalResult:
+        """Asynchronously execute the same pipeline and overrides as :meth:`retrieve`."""
+
+        return await self.aquery(
+            query,
+            profile=profile,
+            overrides=self._make_overrides(
+                filters,
+                organizer,
+                final_k,
+                score_threshold,
+                rerank_top_n,
+                mmr_lambda,
+                mmr_fetch_k,
+                neighbor_expansion,
+                maximum_chunks_per_document,
+            ),
+        )
+
+    def batch_retrieve(
+        self,
+        queries: Sequence[str],
+        *,
+        profile: str = "fast",
+        overrides: QueryOverrides | None = None,
+    ) -> tuple[RetrievalResult, ...]:
+        """Retrieve a batch in input order with one shared immutable option set."""
+
+        return tuple(self.query(query, profile=profile, overrides=overrides) for query in queries)
+
+    async def abatch_retrieve(
+        self,
+        queries: Sequence[str],
+        *,
+        profile: str = "fast",
+        overrides: QueryOverrides | None = None,
+    ) -> tuple[RetrievalResult, ...]:
+        """Concurrently retrieve a batch while preserving input order."""
+
+        return tuple(
+            await asyncio.gather(
+                *(self.aquery(query, profile=profile, overrides=overrides) for query in queries)
+            )
         )
 
     def query(
@@ -248,13 +310,70 @@ class OfflineRagEngine:
         overrides: QueryOverrides | None = None,
     ) -> RetrievalResult:
         started = time.perf_counter()
+        retrieval_profile, request, strategy = self._query_plan(query, profile, overrides)
+        self.vector_store.ensure_index(self.index_specification)
+        candidates = strategy.retrieve(request)
+        retrieved_at = time.perf_counter()
+        candidates, warnings = self._rerank(query, candidates, retrieval_profile)
+        reranked_at = time.perf_counter()
+        candidates = self._postprocess(query, candidates, retrieval_profile)
+        postprocessed_at = time.perf_counter()
+        organized = self._organize(query, candidates, retrieval_profile)
+        finished = time.perf_counter()
+        return self._retrieval_result(
+            query,
+            organized,
+            warnings,
+            started,
+            retrieved_at,
+            reranked_at,
+            postprocessed_at,
+            finished,
+        )
+
+    async def aquery(
+        self,
+        query: str,
+        *,
+        profile: str = "fast",
+        overrides: QueryOverrides | None = None,
+    ) -> RetrievalResult:
+        """Native asynchronous query pipeline with the same result contract as ``query``."""
+
+        started = time.perf_counter()
+        retrieval_profile, request, strategy = self._query_plan(query, profile, overrides)
+        await asyncio.to_thread(self.vector_store.ensure_index, self.index_specification)
+        candidates = await strategy.aretrieve(request)
+        retrieved_at = time.perf_counter()
+        candidates, warnings = await self._arerank(query, candidates, retrieval_profile)
+        reranked_at = time.perf_counter()
+        candidates = await self._apostprocess(query, candidates, retrieval_profile)
+        postprocessed_at = time.perf_counter()
+        organized = await asyncio.to_thread(self._organize, query, candidates, retrieval_profile)
+        finished = time.perf_counter()
+        return self._retrieval_result(
+            query,
+            organized,
+            warnings,
+            started,
+            retrieved_at,
+            reranked_at,
+            postprocessed_at,
+            finished,
+        )
+
+    def _query_plan(
+        self,
+        query: str,
+        profile: str,
+        overrides: QueryOverrides | None,
+    ) -> tuple[RetrievalProfile, RetrievalRequest, RetrievalStrategy]:
         try:
             retrieval_profile = self.config.retrieval_profiles[profile]
         except KeyError as exc:
             raise ValueError(f"unknown retrieval profile: {profile}") from exc
         retrieval_profile = self._resolve_profile(profile, retrieval_profile, overrides)
         filters = overrides.filters if overrides is not None else {}
-        self.vector_store.ensure_index(self.index_specification)
         retrieval_limit = max(
             retrieval_profile.final_k,
             (
@@ -319,45 +438,118 @@ class OfflineRagEngine:
             raise ValueError(
                 f"retrieval strategy is not implemented yet: {retrieval_profile.strategy}"
             )
-        candidates = strategy.retrieve(request)
-        retrieved_at = time.perf_counter()
+        return retrieval_profile, request, strategy
+
+    def _rerank(
+        self,
+        query: str,
+        candidates: Sequence[RetrievalCandidate],
+        profile: RetrievalProfile,
+    ) -> tuple[Sequence[RetrievalCandidate], tuple[str, ...]]:
         warnings: list[str] = []
-        if retrieval_profile.reranker:
-            reranker_config = self.config.rerankers[retrieval_profile.reranker]
+        if profile.reranker:
+            reranker_config = self.config.rerankers[profile.reranker]
             try:
-                candidates = self._reranker_for(retrieval_profile.reranker, reranker_config).rerank(
+                candidates = self._reranker_for(profile.reranker, reranker_config).rerank(
                     query,
                     candidates,
-                    top_n=retrieval_profile.rerank_top_n or retrieval_profile.final_k,
+                    top_n=profile.rerank_top_n or profile.final_k,
                 )
             except (OfflineResourceMissingError, RerankerError):
                 if reranker_config.failure_policy == "fail":
                     raise
-                warnings.append(
-                    f"reranker {retrieval_profile.reranker!r} failed; returned recall order"
-                )
-        reranked_at = time.perf_counter()
-        candidates = score_threshold_filter(candidates, retrieval_profile.score_threshold)
-        candidates = limit_per_document(candidates, retrieval_profile.maximum_chunks_per_document)
-        if retrieval_profile.mmr_lambda is not None:
+                warnings.append(f"reranker {profile.reranker!r} failed; returned recall order")
+        return candidates, tuple(warnings)
+
+    async def _arerank(
+        self,
+        query: str,
+        candidates: Sequence[RetrievalCandidate],
+        profile: RetrievalProfile,
+    ) -> tuple[Sequence[RetrievalCandidate], tuple[str, ...]]:
+        if not profile.reranker:
+            return candidates, ()
+        reranker_config = self.config.rerankers[profile.reranker]
+        try:
+            reranked = await self._reranker_for(profile.reranker, reranker_config).arerank(
+                query,
+                candidates,
+                top_n=profile.rerank_top_n or profile.final_k,
+            )
+            return reranked, ()
+        except (OfflineResourceMissingError, RerankerError):
+            if reranker_config.failure_policy == "fail":
+                raise
+            return candidates, (f"reranker {profile.reranker!r} failed; returned recall order",)
+
+    def _postprocess(
+        self,
+        query: str,
+        candidates: Sequence[RetrievalCandidate],
+        profile: RetrievalProfile,
+    ) -> Sequence[RetrievalCandidate]:
+        candidates = score_threshold_filter(candidates, profile.score_threshold)
+        candidates = limit_per_document(candidates, profile.maximum_chunks_per_document)
+        if profile.mmr_lambda is not None:
             candidates = MaximalMarginalRelevanceSelector(self.embedding).select(
                 query,
                 candidates,
-                limit=retrieval_profile.final_k,
-                relevance_weight=retrieval_profile.mmr_lambda,
+                limit=profile.final_k,
+                relevance_weight=profile.mmr_lambda,
             )
         else:
-            candidates = tuple(candidates[: retrieval_profile.final_k])
-        if retrieval_profile.neighbor_expansion:
+            candidates = tuple(candidates[: profile.final_k])
+        if profile.neighbor_expansion:
             candidates = NeighborExpander(self.vector_store).expand(
-                candidates, distance=retrieval_profile.neighbor_expansion
+                candidates, distance=profile.neighbor_expansion
             )
-        postprocessed_at = time.perf_counter()
-        organizer_config = self._organizer_config(retrieval_profile.organizer)
+        return candidates
+
+    async def _apostprocess(
+        self,
+        query: str,
+        candidates: Sequence[RetrievalCandidate],
+        profile: RetrievalProfile,
+    ) -> Sequence[RetrievalCandidate]:
+        candidates = score_threshold_filter(candidates, profile.score_threshold)
+        candidates = limit_per_document(candidates, profile.maximum_chunks_per_document)
+        if profile.mmr_lambda is not None:
+            candidates = await MaximalMarginalRelevanceSelector(self.embedding).aselect(
+                query,
+                candidates,
+                limit=profile.final_k,
+                relevance_weight=profile.mmr_lambda,
+            )
+        else:
+            candidates = tuple(candidates[: profile.final_k])
+        if profile.neighbor_expansion:
+            candidates = await NeighborExpander(self.vector_store).aexpand(
+                candidates, distance=profile.neighbor_expansion
+            )
+        return candidates
+
+    def _organize(
+        self,
+        query: str,
+        candidates: Sequence[RetrievalCandidate],
+        profile: RetrievalProfile,
+    ) -> OrganizedResult:
+        organizer_config = self._organizer_config(profile.organizer)
         budget = self._budget(organizer_config)
         organizer = self._organizer(organizer_config)
-        organized = organizer.organize(query, candidates, budget)
-        finished = time.perf_counter()
+        return organizer.organize(query, candidates, budget)
+
+    def _retrieval_result(
+        self,
+        query: str,
+        organized: OrganizedResult,
+        warnings: Sequence[str],
+        started: float,
+        retrieved_at: float,
+        reranked_at: float,
+        postprocessed_at: float,
+        finished: float,
+    ) -> RetrievalResult:
         return RetrievalResult(
             query=query,
             processed_query=query.strip(),
@@ -376,6 +568,30 @@ class OfflineRagEngine:
                 "total": (finished - started) * 1000,
             },
             warnings=(*warnings, *organized.warnings),
+        )
+
+    @staticmethod
+    def _make_overrides(
+        filters: Mapping[str, JSONValue] | None,
+        organizer: str | None,
+        final_k: int | None,
+        score_threshold: float | None,
+        rerank_top_n: int | None,
+        mmr_lambda: float | None,
+        mmr_fetch_k: int | None,
+        neighbor_expansion: int | None,
+        maximum_chunks_per_document: int | None,
+    ) -> QueryOverrides:
+        return QueryOverrides(
+            filters=filters or {},
+            organizer=organizer,
+            final_k=final_k,
+            score_threshold=score_threshold,
+            rerank_top_n=rerank_top_n,
+            mmr_lambda=mmr_lambda,
+            mmr_fetch_k=mmr_fetch_k,
+            neighbor_expansion=neighbor_expansion,
+            maximum_chunks_per_document=maximum_chunks_per_document,
         )
 
     def _resolve_profile(
@@ -483,8 +699,18 @@ class OfflineRagEngine:
         self.journal.close()
         self.vector_store.close()
 
+    async def aclose(self) -> None:
+        self.journal.close()
+        await self.vector_store.aclose()
+
     def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_args: object) -> None:
         self.close()
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *_args: object) -> None:
+        await self.aclose()
