@@ -126,7 +126,7 @@ CLI 与未来可选的 HTTP 服务均调用 `RetrievalEngine`，不能复制业�
 
 ### 6.4 可选查询服务适配器
 
-未来可提供 `rag-server`，但它是薄适配层，不属于核心检索逻辑。公司也可以直接在自己的 FastAPI、Django 或任务进程中引用 Python 包。
+提供可选 FastAPI 薄适配层和 `rag-index serve` 单进程入口，但它不属于核心检索逻辑。适配层复用原生 async/batch API，提供生命周期管理、请求 ID、批量上限、稳定错误映射及可选 Bearer 鉴权；公司也可以直接在自己的 FastAPI、Django 或任务进程中引用 Python 包。多进程服务必须使用 Qdrant Server。
 
 ## 7. 推荐项目结构
 

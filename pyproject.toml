@@ -31,9 +31,11 @@ sparse = ["fastembed>=0.7"]
 tables = ["openpyxl>=3.1"]
 office = ["python-pptx>=1.0"]
 ocr = ["pillow>=10", "pytesseract>=0.3", "pymupdf>=1.24"]
+http = ["fastapi>=0.115", "uvicorn>=0.30"]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28",
     "mypy>=1.15",
     "pytest>=8.0",
     "pytest-asyncio>=0.24",

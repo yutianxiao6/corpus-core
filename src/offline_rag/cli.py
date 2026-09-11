@@ -15,7 +15,7 @@ from offline_rag import __version__
 from offline_rag.config import load_config, parse_cli_overrides
 from offline_rag.config.models import RagConfig
 from offline_rag.contracts.common import JSONValue
-from offline_rag.exceptions import OfflineRagError
+from offline_rag.exceptions import ConfigurationError, OfflineRagError
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -95,6 +95,11 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate_parser.add_argument("--min-ndcg", type=float)
     evaluate_parser.add_argument("--json", action="store_true")
 
+    serve_parser = subparsers.add_parser("serve", help="run the optional HTTP query adapter")
+    serve_parser.add_argument("--host", default="127.0.0.1")
+    serve_parser.add_argument("--port", type=int, default=8000)
+    serve_parser.add_argument("--bearer-token-env")
+
     subparsers.add_parser("doctor", help="validate local configuration and resources")
     return parser
 
@@ -152,6 +157,13 @@ def main(argv: list[str] | None = None) -> int:
             return _backup(config, args.destination, as_json=args.json)
         if args.command == "restore":
             return _restore(config, args.archive, confirmed=args.yes, as_json=args.json)
+        if args.command == "serve":
+            return _serve(
+                config,
+                host=args.host,
+                port=args.port,
+                bearer_token_env=args.bearer_token_env,
+            )
         if args.command == "doctor":
             return _doctor(config)
     except (OfflineRagError, OSError, TypeError, ValueError) as exc:
@@ -378,6 +390,34 @@ def _doctor(config: RagConfig) -> int:
     ok = all(bool(item["ok"]) for item in checks)
     _print_data({"ok": ok, "checks": checks}, as_json=True)
     return 0 if ok else 1
+
+
+def _serve(
+    config: RagConfig,
+    *,
+    host: str,
+    port: int,
+    bearer_token_env: str | None,
+) -> int:
+    if port <= 0 or port > 65_535:
+        raise ValueError("HTTP port must be between 1 and 65535")
+    if host not in {"127.0.0.1", "::1", "localhost"} and bearer_token_env is None:
+        raise ConfigurationError("non-loopback HTTP binding requires --bearer-token-env")
+    try:
+        import uvicorn
+    except ImportError as exc:
+        raise ConfigurationError("HTTP serving requires the optional 'http' extra") from exc
+    from offline_rag.http_service import create_app
+
+    app = create_app(config, bearer_token_env=bearer_token_env)
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        log_level=config.runtime.log_level.lower(),
+        access_log=False,
+    )
+    return 0
 
 
 def _evaluate(
