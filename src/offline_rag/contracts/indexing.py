@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from enum import StrEnum
@@ -51,12 +52,35 @@ class EmbeddingSpecification:
 
 
 @dataclass(frozen=True, slots=True)
+class SparseEmbeddingSpecification:
+    provider: str
+    algorithm: str
+    revision: str
+    hash_space: int
+    normalized: bool
+    include_cjk_bigrams: bool = True
+
+    def __post_init__(self) -> None:
+        require_non_empty(self.provider, "provider")
+        require_non_empty(self.algorithm, "algorithm")
+        require_non_empty(self.revision, "revision")
+        require_positive(self.hash_space, "hash_space")
+
+    def fingerprint(self) -> str:
+        encoded = json.dumps(
+            asdict(self), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
 class IndexSpecification:
     index_format_version: int
     payload_schema_version: int
     embedding: EmbeddingSpecification
     parser_versions: Mapping[str, str]
     chunking_configuration: Mapping[str, JSONValue]
+    sparse_embedding: SparseEmbeddingSpecification | None = None
 
     def __post_init__(self) -> None:
         require_positive(self.index_format_version, "index_format_version")
@@ -73,6 +97,9 @@ class IndexSpecification:
             "index_format_version": self.index_format_version,
             "payload_schema_version": self.payload_schema_version,
             "embedding": self.embedding.fingerprint(),
+            "sparse_embedding": (
+                self.sparse_embedding.fingerprint() if self.sparse_embedding else None
+            ),
             "parser_versions": dict(self.parser_versions),
             "chunking_configuration": _plain_json(self.chunking_configuration),
         }
@@ -175,6 +202,12 @@ class VectorRecord:
             raise ValueError("sparse vector indices and values must have equal length")
         if any(index < 0 for index in self.sparse_indices):
             raise ValueError("sparse vector indices must be non-negative")
+        if tuple(self.sparse_indices) != tuple(sorted(set(self.sparse_indices))):
+            raise ValueError("sparse vector indices must be sorted and unique")
+        if any(not math.isfinite(value) for value in self.dense_vector):
+            raise ValueError("dense_vector values must be finite")
+        if any(not math.isfinite(value) for value in self.sparse_values):
+            raise ValueError("sparse vector values must be finite")
         object.__setattr__(self, "dense_vector", tuple(float(value) for value in self.dense_vector))
         object.__setattr__(self, "sparse_indices", tuple(self.sparse_indices))
         object.__setattr__(

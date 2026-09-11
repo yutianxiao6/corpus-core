@@ -1,6 +1,6 @@
-# Dense 查询与结果组织
+# Dense、Sparse、Hybrid 查询与结果组织
 
-首个可用版本提供同步/异步 dense similarity 检索。查询文本通过 Qwen3 query instruction 编码，文档编码不加 instruction；两条路径不会混用。
+查询文本通过 Qwen3 query instruction 生成 dense 向量，文档编码不加 instruction；两条路径不会混用。配置 `sparse_embedding` 后还可使用纯 sparse 或 hybrid profile。Hybrid 分别召回两组候选，支持 RRF 或逐路 min-max 归一化后的加权融合，绝不直接相加两种量纲不同的原始分数。
 
 ```python
 from offline_rag.config import load_config
@@ -10,6 +10,8 @@ config = load_config("rag.yaml")
 with OfflineRagEngine.from_config(config) as engine:
     result = engine.query("离线安装需要什么环境？", profile="fast")
 ```
+
+完全离线的 hybrid 示例见[配置说明](configuration.md#完全离线-hybrid)。返回的每个候选保留 `dense_score`、`sparse_score`、`fusion_score` 和 `origins`，便于企业评测和检索问题排查。
 
 `RetrievalResult` 同时返回排序后的 chunk、阶段耗时、索引版本和 embedding 指纹。使用 Context organizer 时还会返回可直接交给上层 LLM 的 context 与结构化 citations。
 

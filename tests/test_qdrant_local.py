@@ -10,9 +10,10 @@ from offline_rag.contracts.indexing import (
     DistanceMetric,
     EmbeddingSpecification,
     IndexSpecification,
+    SparseEmbeddingSpecification,
     VectorRecord,
 )
-from offline_rag.contracts.retrieval import SearchRequest
+from offline_rag.contracts.retrieval import SearchRequest, SearchVector
 from offline_rag.exceptions import IndexCompatibilityError
 from offline_rag.vectorstores import QdrantLocalVectorStore, chunk_to_payload
 
@@ -50,6 +51,54 @@ def make_chunk(chunk_id: str, document_id: str, content: str, index: int) -> Chu
 
 
 class QdrantLocalTests(unittest.TestCase):
+    def test_named_dense_and_sparse_vectors_share_one_collection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            specification = replace(
+                make_index_specification(),
+                sparse_embedding=SparseEmbeddingSpecification(
+                    provider="fixture",
+                    algorithm="exact",
+                    revision="1",
+                    hash_space=1000,
+                    normalized=True,
+                ),
+            )
+            exact = make_chunk("exact", "doc-exact", "退款政策", 0)
+            semantic = make_chunk("semantic", "doc-semantic", "returns", 0)
+            with QdrantLocalVectorStore(directory) as store:
+                store.ensure_index(specification)
+                store.upsert(
+                    [
+                        VectorRecord(
+                            exact.chunk_id,
+                            [0.0, 1.0, 0.0],
+                            chunk_to_payload(exact),
+                            sparse_indices=[7],
+                            sparse_values=[1.0],
+                        ),
+                        VectorRecord(
+                            semantic.chunk_id,
+                            [1.0, 0.0, 0.0],
+                            chunk_to_payload(semantic),
+                            sparse_indices=[9],
+                            sparse_values=[1.0],
+                        ),
+                    ]
+                )
+                dense = store.search(SearchRequest([1.0, 0.0, 0.0], limit=1))
+                sparse = store.search(
+                    SearchRequest(
+                        (),
+                        limit=1,
+                        sparse_indices=[7],
+                        sparse_values=[1.0],
+                        vector=SearchVector.SPARSE,
+                    )
+                )
+
+            self.assertEqual(dense[0].chunk_id, "semantic")
+            self.assertEqual(sparse[0].chunk_id, "exact")
+
     def test_create_upsert_filter_search_delete_and_reopen(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "qdrant"

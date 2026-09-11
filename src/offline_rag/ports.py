@@ -11,6 +11,7 @@ from offline_rag.contracts.indexing import (
     DeleteReport,
     EmbeddingSpecification,
     IndexSpecification,
+    SparseEmbeddingSpecification,
     UpsertReport,
     VectorRecord,
 )
@@ -24,6 +25,7 @@ from offline_rag.contracts.retrieval import (
 )
 
 Vector: TypeAlias = Sequence[float]
+SparseVector: TypeAlias = tuple[Sequence[int], Sequence[float]]
 
 
 class SourceProvider(Protocol):
@@ -57,6 +59,17 @@ class EmbeddingProvider(Protocol):
     def embed_query(self, text: str) -> Vector: ...
 
     async def aembed_query(self, text: str) -> Vector: ...
+
+
+class SparseEmbeddingProvider(Protocol):
+    @property
+    def specification(self) -> SparseEmbeddingSpecification: ...
+
+    def embed_documents(self, texts: Sequence[str]) -> Sequence[SparseVector]: ...
+
+    def embed_query(self, text: str) -> SparseVector: ...
+
+    async def aembed_query(self, text: str) -> SparseVector: ...
 
 
 class VectorStorePort(Protocol):

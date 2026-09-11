@@ -40,6 +40,14 @@ class EmbeddingConfig(StrictModel):
     )
 
 
+class SparseEmbeddingConfig(StrictModel):
+    provider: Literal["hashed_lexical"] = "hashed_lexical"
+    revision: str = "1"
+    hash_space: int = Field(default=2_147_483_647, gt=0)
+    normalize: bool = True
+    include_cjk_bigrams: bool = True
+
+
 class VectorStoreConfig(StrictModel):
     provider: str = "qdrant"
     mode: Literal["local", "server"] = "local"
@@ -183,6 +191,12 @@ class FusionConfig(StrictModel):
     dense_weight: float = Field(default=0.5, ge=0)
     sparse_weight: float = Field(default=0.5, ge=0)
 
+    @model_validator(mode="after")
+    def require_positive_weight(self) -> FusionConfig:
+        if self.dense_weight + self.sparse_weight <= 0:
+            raise ValueError("at least one fusion weight must be positive")
+        return self
+
 
 class RetrievalProfile(StrictModel):
     strategy: Literal["dense", "sparse", "hybrid", "parent_child"] = "dense"
@@ -231,6 +245,7 @@ class RagConfig(StrictModel):
     version: Literal[1] = 1
     runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
+    sparse_embedding: SparseEmbeddingConfig | None = None
     vector_store: VectorStoreConfig = Field(default_factory=VectorStoreConfig)
     ingestion: IngestionConfig = Field(default_factory=IngestionConfig)
     chunk_profiles: dict[str, ChunkProfile] = Field(default_factory=_default_chunk_profiles)
@@ -259,6 +274,12 @@ class RagConfig(StrictModel):
                     f"routing rule {position} references missing chunk profile {rule.use!r}"
                 )
         for name, retrieval_profile in self.retrieval_profiles.items():
+            if retrieval_profile.strategy in ("sparse", "hybrid") and self.sparse_embedding is None:
+                raise ValueError(
+                    f"retrieval profile {name!r} requires sparse_embedding configuration"
+                )
+            if retrieval_profile.strategy == "hybrid" and retrieval_profile.fusion is None:
+                raise ValueError(f"hybrid retrieval profile {name!r} requires fusion configuration")
             if retrieval_profile.reranker and retrieval_profile.reranker not in self.rerankers:
                 raise ValueError(
                     f"retrieval profile {name!r} references missing reranker "

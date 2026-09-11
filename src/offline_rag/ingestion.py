@@ -53,7 +53,7 @@ from offline_rag.parsers import (
     StructuredTextParser,
     TextParser,
 )
-from offline_rag.ports import EmbeddingProvider, VectorStorePort
+from offline_rag.ports import EmbeddingProvider, SparseEmbeddingProvider, VectorStorePort
 from offline_rag.sources import (
     DiscoveryOptions,
     FileSystemSourceProvider,
@@ -103,12 +103,14 @@ class IngestionService:
         config: RagConfig,
         *,
         embedding: EmbeddingProvider | None = None,
+        sparse_embedding: SparseEmbeddingProvider | None = None,
         vector_store: VectorStorePort | None = None,
         token_counter: Callable[[str], int] | None = None,
         journal: IngestionJournal | None = None,
     ) -> None:
         self._config = config
         self._embedding = embedding
+        self._sparse_embedding = sparse_embedding
         self._vector_store = vector_store
         self._token_counter = token_counter
         self._journal = journal
@@ -315,9 +317,24 @@ class IngestionService:
             )
             if len(vectors) != len(item.chunks):
                 raise RuntimeError("embedding batch size does not match chunk count")
+            sparse_vectors = (
+                self._sparse_embedding.embed_documents(
+                    [chunk.embedding_text for chunk in item.chunks]
+                )
+                if self._sparse_embedding is not None
+                else tuple(((), ()) for _ in item.chunks)
+            )
+            if len(sparse_vectors) != len(item.chunks):
+                raise RuntimeError("sparse embedding batch size does not match chunk count")
             records = [
-                VectorRecord(chunk.chunk_id, vector, chunk_to_payload(chunk))
-                for chunk, vector in zip(item.chunks, vectors, strict=True)
+                VectorRecord(
+                    chunk.chunk_id,
+                    vector,
+                    chunk_to_payload(chunk),
+                    sparse_indices=sparse[0],
+                    sparse_values=sparse[1],
+                )
+                for chunk, vector, sparse in zip(item.chunks, vectors, sparse_vectors, strict=True)
             ]
             batch_size = self._config.ingestion.commit_batch_size
             for offset in range(0, len(records), batch_size):
@@ -505,7 +522,9 @@ class IngestionService:
 
 
 def build_index_specification(
-    config: RagConfig, embedding: EmbeddingSpecification
+    config: RagConfig,
+    embedding: EmbeddingSpecification,
+    sparse_embedding: SparseEmbeddingProvider | None = None,
 ) -> IndexSpecification:
     dumped = config.model_dump(mode="json")["chunk_profiles"]
     chunking = cast(Mapping[str, JSONValue], dumped)
@@ -522,4 +541,5 @@ def build_index_specification(
             "structured_text": StructuredTextParser.version,
         },
         chunking_configuration=chunking,
+        sparse_embedding=(sparse_embedding.specification if sparse_embedding is not None else None),
     )

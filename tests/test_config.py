@@ -70,6 +70,24 @@ class ConfigurationTests(unittest.TestCase):
             with self.assertRaises(ConfigurationError):
                 load_config(path)
 
+    def test_hybrid_profile_requires_sparse_configuration_and_fusion(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            missing_sparse = self._write(
+                directory,
+                "retrieval_profiles:\n  balanced:\n    strategy: hybrid\n    fusion:\n      type: rrf\n",
+            )
+            with self.assertRaises(ConfigurationError):
+                load_config(missing_sparse)
+
+            valid = self._write(
+                directory,
+                "sparse_embedding:\n  provider: hashed_lexical\n"
+                "retrieval_profiles:\n  balanced:\n    strategy: hybrid\n"
+                "    fusion:\n      type: rrf\n",
+            )
+            config = load_config(valid)
+            self.assertEqual(config.retrieval_profiles["balanced"].strategy, "hybrid")
+
 
 if __name__ == "__main__":
     unittest.main()

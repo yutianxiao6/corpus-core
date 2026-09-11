@@ -16,11 +16,19 @@ from offline_rag.contracts.retrieval import (
     RetrievalRequest,
     RetrievalResult,
 )
-from offline_rag.embeddings import QwenSentenceTransformerEmbedding
+from offline_rag.embeddings import (
+    HashedLexicalSparseEmbedding,
+    QwenSentenceTransformerEmbedding,
+)
 from offline_rag.indexing import IngestionJournal
 from offline_rag.ingestion import IngestionService, PreviewReport, build_index_specification
 from offline_rag.organizers import ContextOrganizer, FlatOrganizer
-from offline_rag.retrieval import DenseSimilarityStrategy
+from offline_rag.ports import RetrievalStrategy
+from offline_rag.retrieval import (
+    DenseSimilarityStrategy,
+    HybridRetrievalStrategy,
+    SparseSimilarityStrategy,
+)
 from offline_rag.vectorstores import QdrantLocalVectorStore
 
 
@@ -42,16 +50,30 @@ class OfflineRagEngine:
             query_instruction=embedding_config.query_instruction,
             device=embedding_config.device,
         )
+        sparse_config = config.sparse_embedding
+        self.sparse_embedding = (
+            HashedLexicalSparseEmbedding(
+                hash_space=sparse_config.hash_space,
+                normalize=sparse_config.normalize,
+                include_cjk_bigrams=sparse_config.include_cjk_bigrams,
+                revision=sparse_config.revision,
+            )
+            if sparse_config is not None
+            else None
+        )
         self.vector_store = QdrantLocalVectorStore(
             config.vector_store.path,
             collection_name=config.vector_store.collection_alias,
         )
-        self.index_specification = build_index_specification(config, self.embedding.specification)
+        self.index_specification = build_index_specification(
+            config, self.embedding.specification, self.sparse_embedding
+        )
         self.journal = IngestionJournal(Path(config.runtime.work_dir) / "ingestion.sqlite3")
         self.journal.recover_interrupted_jobs()
         self.ingestion = IngestionService(
             config,
             embedding=self.embedding,
+            sparse_embedding=self.sparse_embedding,
             vector_store=self.vector_store,
             token_counter=self.embedding.count_tokens,
             journal=self.journal,
@@ -82,6 +104,7 @@ class OfflineRagEngine:
                 service = IngestionService(
                     self.config,
                     embedding=self.embedding,
+                    sparse_embedding=self.sparse_embedding,
                     vector_store=staging,
                     token_counter=self.embedding.count_tokens,
                     journal=staging_journal,
@@ -133,19 +156,54 @@ class OfflineRagEngine:
             retrieval_profile = self.config.retrieval_profiles[profile]
         except KeyError as exc:
             raise ValueError(f"unknown retrieval profile: {profile}") from exc
-        if retrieval_profile.strategy != "dense":
-            raise ValueError("P1 engine currently supports dense retrieval profiles only")
         self.vector_store.ensure_index(self.index_specification)
         options = RetrievalOptions(
             profile=profile,
             final_k=retrieval_profile.final_k,
             organizer=retrieval_profile.organizer,
         )
-        candidates = DenseSimilarityStrategy(
-            self.embedding,
-            self.vector_store,
-            fetch_k=retrieval_profile.fetch_k or retrieval_profile.final_k,
-        ).retrieve(RetrievalRequest(query, options))
+        request = RetrievalRequest(query, options)
+        strategy: RetrievalStrategy
+        if retrieval_profile.strategy == "dense":
+            strategy = DenseSimilarityStrategy(
+                self.embedding,
+                self.vector_store,
+                fetch_k=retrieval_profile.fetch_k or retrieval_profile.final_k,
+            )
+        elif retrieval_profile.strategy == "sparse":
+            if self.sparse_embedding is None:
+                raise ValueError("sparse retrieval requires sparse_embedding configuration")
+            strategy = SparseSimilarityStrategy(
+                self.sparse_embedding,
+                self.vector_store,
+                fetch_k=retrieval_profile.sparse_fetch_k
+                or retrieval_profile.fetch_k
+                or retrieval_profile.final_k,
+            )
+        elif retrieval_profile.strategy == "hybrid":
+            if self.sparse_embedding is None or retrieval_profile.fusion is None:
+                raise ValueError("hybrid retrieval requires sparse embedding and fusion")
+            fusion = retrieval_profile.fusion
+            strategy = HybridRetrievalStrategy(
+                self.embedding,
+                self.sparse_embedding,
+                self.vector_store,
+                dense_fetch_k=retrieval_profile.dense_fetch_k
+                or retrieval_profile.fetch_k
+                or retrieval_profile.final_k,
+                sparse_fetch_k=retrieval_profile.sparse_fetch_k
+                or retrieval_profile.fetch_k
+                or retrieval_profile.final_k,
+                fusion=fusion.type,
+                rrf_constant=fusion.constant,
+                dense_weight=fusion.dense_weight,
+                sparse_weight=fusion.sparse_weight,
+            )
+        else:
+            raise ValueError(
+                f"retrieval strategy is not implemented yet: {retrieval_profile.strategy}"
+            )
+        candidates = strategy.retrieve(request)
         retrieved_at = time.perf_counter()
         organizer_config = self.config.organizers.get(retrieval_profile.organizer)
         budget = self._budget(organizer_config)

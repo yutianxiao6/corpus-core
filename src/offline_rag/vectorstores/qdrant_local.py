@@ -21,10 +21,12 @@ from offline_rag.contracts.indexing import (
     UpsertReport,
     VectorRecord,
 )
-from offline_rag.contracts.retrieval import SearchHit, SearchRequest
+from offline_rag.contracts.retrieval import SearchHit, SearchRequest, SearchVector
 from offline_rag.exceptions import IndexCompatibilityError, VectorStoreError
 
 _POINT_NAMESPACE = uuid.UUID("45a42a71-690b-44fb-abee-e44463894cd1")
+_DENSE_VECTOR_NAME = "dense"
+_SPARSE_VECTOR_NAME = "sparse"
 
 
 class QdrantLocalVectorStore:
@@ -39,6 +41,7 @@ class QdrantLocalVectorStore:
         self._client = QdrantClient(path=str(self._path))
         self._lock = RLock()
         self._owns_client = True
+        self._sparse_enabled = False
 
     @property
     def collection_name(self) -> str:
@@ -132,6 +135,7 @@ class QdrantLocalVectorStore:
         view._client = self._client
         view._lock = self._lock
         view._owns_client = False
+        view._sparse_enabled = False
         return view
 
     def _physical_collection_exists(self, collection_name: str) -> bool:
@@ -141,21 +145,30 @@ class QdrantLocalVectorStore:
 
     def ensure_index(self, specification: IndexSpecification) -> None:
         fingerprint = specification.fingerprint()
+        sparse_enabled = specification.sparse_embedding is not None
         with self._lock:
             try:
                 if not self._client.collection_exists(self._collection_name):
+                    vectors_config: models.VectorParams | Mapping[str, models.VectorParams]
+                    vectors_config = models.VectorParams(
+                        size=specification.embedding.dimension,
+                        distance=self._distance(specification.embedding.distance),
+                    )
+                    sparse_vectors_config = None
+                    if sparse_enabled:
+                        vectors_config = {_DENSE_VECTOR_NAME: vectors_config}
+                        sparse_vectors_config = {_SPARSE_VECTOR_NAME: models.SparseVectorParams()}
                     self._client.create_collection(
                         collection_name=self._collection_name,
-                        vectors_config=models.VectorParams(
-                            size=specification.embedding.dimension,
-                            distance=self._distance(specification.embedding.distance),
-                        ),
+                        vectors_config=vectors_config,
+                        sparse_vectors_config=sparse_vectors_config,
                         metadata={
                             "offline_rag_index_fingerprint": fingerprint,
                             "index_format_version": specification.index_format_version,
                             "payload_schema_version": specification.payload_schema_version,
                         },
                     )
+                    self._sparse_enabled = sparse_enabled
                     return
                 info = self._client.get_collection(self._collection_name)
                 metadata = info.config.metadata or {}
@@ -165,6 +178,7 @@ class QdrantLocalVectorStore:
                         "Qdrant collection has an incompatible index fingerprint",
                         details={"expected": fingerprint, "actual": actual},
                     )
+                self._sparse_enabled = sparse_enabled
             except IndexCompatibilityError:
                 raise
             except Exception as exc:
@@ -173,14 +187,29 @@ class QdrantLocalVectorStore:
     def upsert(self, records: Sequence[VectorRecord]) -> UpsertReport:
         if not records:
             return UpsertReport(requested_count=0, completed_count=0)
-        points = [
-            models.PointStruct(
-                id=self._point_id(record.chunk_id),
-                vector=list(record.dense_vector),
-                payload=self._payload(record),
+        points: list[models.PointStruct] = []
+        for record in records:
+            vector: list[float] | dict[str, list[float] | models.SparseVector]
+            if self._sparse_enabled:
+                if not record.sparse_indices:
+                    raise VectorStoreError("sparse-enabled index requires sparse vectors on upsert")
+                vector = {
+                    _DENSE_VECTOR_NAME: list(record.dense_vector),
+                    _SPARSE_VECTOR_NAME: models.SparseVector(
+                        indices=list(record.sparse_indices), values=list(record.sparse_values)
+                    ),
+                }
+            else:
+                if record.sparse_indices:
+                    raise VectorStoreError("cannot upsert sparse vectors into a dense-only index")
+                vector = list(record.dense_vector)
+            points.append(
+                models.PointStruct(
+                    id=self._point_id(record.chunk_id),
+                    vector=vector,
+                    payload=self._payload(record),
+                )
             )
-            for record in records
-        ]
         with self._lock:
             try:
                 self._client.upsert(collection_name=self._collection_name, points=points, wait=True)
@@ -211,11 +240,24 @@ class QdrantLocalVectorStore:
         return DeleteReport(requested_count=len(unique_ids), deleted_count=len(existing))
 
     def search(self, request: SearchRequest) -> Sequence[SearchHit]:
+        if request.vector is SearchVector.SPARSE and not self._sparse_enabled:
+            raise VectorStoreError("sparse search requires a sparse-enabled index")
+        query: list[float] | models.SparseVector
+        using: str | None
+        if request.vector is SearchVector.SPARSE:
+            query = models.SparseVector(
+                indices=list(request.sparse_indices), values=list(request.sparse_values)
+            )
+            using = _SPARSE_VECTOR_NAME
+        else:
+            query = list(request.query_vector)
+            using = _DENSE_VECTOR_NAME if self._sparse_enabled else None
         with self._lock:
             try:
                 response = self._client.query_points(
                     collection_name=self._collection_name,
-                    query=list(request.query_vector),
+                    query=query,
+                    using=using,
                     query_filter=self._filter(request.filters),
                     limit=request.limit,
                     with_payload=True,

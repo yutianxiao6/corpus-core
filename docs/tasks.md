@@ -94,8 +94,8 @@
 - [x] `P2-010` 实现导入状态机、journal 和中断恢复。
 - [x] `P2-011` 实现幂等增量新增、修改和删除同步。
 - [x] `P2-012` 实现 staging collection、alias 切换和回滚。
-- [ ] `P2-013` 实现 sparse vector 与 hybrid 检索。
-- [ ] `P2-014` 实现 RRF 和归一化加权融合。
+- [x] `P2-013` 实现 sparse vector 与 hybrid 检索。
+- [x] `P2-014` 实现 RRF 和归一化加权融合。
 - [ ] `P2-015` 实现 Qwen3 本地 reranker。
 - [ ] `P2-016` 实现 threshold、MMR、neighbor expansion 和多样性控制。
 - [ ] `P2-017` 实现 Grouped、MergeNeighbors、Parent、Diverse、Debug organizer。
@@ -117,7 +117,7 @@
 
 ## 决策检查点
 
-- [ ] `D-001` 确认同一 Qdrant 中是否默认启用 sparse vectors。
+- [x] `D-001` 确认同一 Qdrant 中是否默认启用 sparse vectors（显式配置启用，默认 dense-only）。
 - [ ] `D-002` 确认首版强制文档格式和 OCR 范围。
 - [ ] `D-003` 确认最低 CPU、内存、GPU 支持范围。
 - [ ] `D-004` 确认目标 chunk 数与并发规模。

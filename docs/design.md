@@ -498,6 +498,13 @@ embedding:
   query_instruction: >-
     Given a user question, retrieve relevant passages that answer the question.
 
+sparse_embedding:
+  provider: hashed_lexical
+  revision: "1"
+  hash_space: 2147483647
+  normalize: true
+  include_cjk_bigrams: true
+
 vector_store:
   provider: qdrant
   mode: local

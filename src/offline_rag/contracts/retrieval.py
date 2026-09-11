@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 from offline_rag.contracts.chunks import Chunk
 from offline_rag.contracts.common import (
@@ -54,6 +56,11 @@ class RetrievalRequest:
         require_non_empty(self.query, "query")
 
 
+class SearchVector(StrEnum):
+    DENSE = "dense"
+    SPARSE = "sparse"
+
+
 @dataclass(frozen=True, slots=True)
 class SearchRequest:
     query_vector: Sequence[float]
@@ -61,13 +68,24 @@ class SearchRequest:
     filters: Mapping[str, JSONValue] = field(default_factory=dict)
     sparse_indices: Sequence[int] = ()
     sparse_values: Sequence[float] = ()
+    vector: SearchVector = SearchVector.DENSE
 
     def __post_init__(self) -> None:
-        if not self.query_vector:
-            raise ValueError("query_vector must not be empty")
         require_positive(self.limit, "limit")
         if len(self.sparse_indices) != len(self.sparse_values):
             raise ValueError("sparse vector indices and values must have equal length")
+        if tuple(self.sparse_indices) != tuple(sorted(set(self.sparse_indices))):
+            raise ValueError("sparse vector indices must be sorted and unique")
+        if any(index < 0 for index in self.sparse_indices):
+            raise ValueError("sparse vector indices must be non-negative")
+        if self.vector is SearchVector.DENSE and not self.query_vector:
+            raise ValueError("dense search requires query_vector")
+        if self.vector is SearchVector.SPARSE and not self.sparse_indices:
+            raise ValueError("sparse search requires sparse vector values")
+        if any(not math.isfinite(value) for value in self.query_vector):
+            raise ValueError("query_vector values must be finite")
+        if any(not math.isfinite(value) for value in self.sparse_values):
+            raise ValueError("sparse vector values must be finite")
         object.__setattr__(self, "query_vector", tuple(float(value) for value in self.query_vector))
         object.__setattr__(self, "sparse_indices", tuple(self.sparse_indices))
         object.__setattr__(

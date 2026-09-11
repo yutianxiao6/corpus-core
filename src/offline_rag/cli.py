@@ -191,6 +191,10 @@ def _query(config: RagConfig, query: str, *, profile: str, as_json: bool) -> int
             {
                 "chunk_id": candidate.chunk.chunk_id,
                 "score": candidate.final_score,
+                "dense_score": candidate.dense_score,
+                "sparse_score": candidate.sparse_score,
+                "fusion_score": candidate.fusion_score,
+                "origins": candidate.origins,
                 "source": candidate.chunk.source_uri,
                 "content": candidate.chunk.content,
             }

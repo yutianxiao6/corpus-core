@@ -20,6 +20,37 @@ YAML 使用安全加载器，重复 key、未知字段、不支持的版本和�
 
 完整字段示例见 [设计文档](design.md#112-完整配置示例)。
 
+## 完全离线 Hybrid
+
+启用内置稀疏编码后，每个 Qdrant point 同时保存 `dense` 和 `sparse` named vectors。编码器使用稳定哈希、次线性词频和 L2 归一化，支持中文单字/双字特征、英文词、数字、路径及 API/产品编号，不需要模型文件或联网下载。
+
+```yaml
+sparse_embedding:
+  provider: hashed_lexical
+  revision: "1"
+  hash_space: 2147483647
+  normalize: true
+  include_cjk_bigrams: true
+
+retrieval_profiles:
+  fast:
+    strategy: dense
+    fetch_k: 8
+    final_k: 5
+  balanced:
+    strategy: hybrid
+    dense_fetch_k: 24
+    sparse_fetch_k: 24
+    fusion:
+      type: rrf
+      constant: 60
+      dense_weight: 0.5
+      sparse_weight: 0.5
+    final_k: 6
+```
+
+`sparse_embedding` 未配置时保持 dense-only 索引。它属于索引指纹的一部分；启用、关闭或改变参数后必须重建索引，系统不会把不兼容的旧 collection 当作可用索引。
+
 ## 插件白名单
 
 `enabled_plugins` 只接受 `<kind>:<entry-point-name>`，例如：

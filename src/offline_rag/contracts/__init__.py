@@ -13,6 +13,7 @@ from offline_rag.contracts.indexing import (
     EmbeddingSpecification,
     IndexSpecification,
     IngestionReport,
+    SparseEmbeddingSpecification,
     UpsertReport,
     VectorRecord,
 )
@@ -23,6 +24,7 @@ from offline_rag.contracts.retrieval import (
     RetrievalResult,
     SearchHit,
     SearchRequest,
+    SearchVector,
 )
 
 __all__ = [
@@ -42,7 +44,9 @@ __all__ = [
     "RetrievalResult",
     "SearchHit",
     "SearchRequest",
+    "SearchVector",
     "SourceDescriptor",
+    "SparseEmbeddingSpecification",
     "UpsertReport",
     "VectorRecord",
 ]

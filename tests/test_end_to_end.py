@@ -11,14 +11,16 @@ from offline_rag.config.models import (
     IngestionConfig,
     RagConfig,
     RecursiveChunkProfile,
+    SparseEmbeddingConfig,
     VectorStoreConfig,
 )
 from offline_rag.contracts.indexing import DistanceMetric, EmbeddingSpecification
 from offline_rag.contracts.retrieval import RetrievalOptions, RetrievalRequest
+from offline_rag.embeddings import HashedLexicalSparseEmbedding
 from offline_rag.indexing import IngestionJournal
 from offline_rag.ingestion import IngestionService, build_index_specification
 from offline_rag.ports import Vector
-from offline_rag.retrieval import DenseSimilarityStrategy
+from offline_rag.retrieval import DenseSimilarityStrategy, HybridRetrievalStrategy
 from offline_rag.vectorstores import QdrantLocalVectorStore
 
 
@@ -54,6 +56,51 @@ class KeywordEmbedding:
 
 
 class OfflineEndToEndTests(unittest.TestCase):
+    def test_mixed_language_hybrid_flow_indexes_both_vector_types(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            documents = root / "documents"
+            documents.mkdir()
+            (documents / "refund.txt").write_text(
+                "退款政策：订单 SKU-2048 可在七天内申请。", encoding="utf-8"
+            )
+            (documents / "install.txt").write_text(
+                "Installation guide for the local package.", encoding="utf-8"
+            )
+            config = RagConfig(
+                embedding=EmbeddingConfig(dimension=3),
+                sparse_embedding=SparseEmbeddingConfig(),
+                vector_store=VectorStoreConfig(path=str(root / "qdrant")),
+                chunk_profiles={
+                    "default": RecursiveChunkProfile(
+                        type="recursive", chunk_size=100, chunk_overlap=10, minimum_size=0
+                    )
+                },
+            )
+            dense = KeywordEmbedding()
+            sparse = HashedLexicalSparseEmbedding()
+            specification = build_index_specification(config, dense.specification, sparse)
+            with QdrantLocalVectorStore(root / "qdrant") as store:
+                report = IngestionService(
+                    config,
+                    embedding=dense,
+                    sparse_embedding=sparse,
+                    vector_store=store,
+                ).build([documents], specification)
+                candidates = HybridRetrievalStrategy(
+                    dense,
+                    sparse,
+                    store,
+                    dense_fetch_k=5,
+                    sparse_fetch_k=5,
+                    fusion="rrf",
+                    sparse_weight=2.0,
+                ).retrieve(RetrievalRequest("SKU-2048 退款", RetrievalOptions(final_k=1)))
+
+        self.assertEqual(report.indexed_count, 2)
+        self.assertEqual(candidates[0].chunk.content, "退款政策：订单 SKU-2048 可在七天内申请。")
+        self.assertIn("sparse", candidates[0].origins)
+
     def test_txt_and_markdown_flow_from_directory_to_dense_result(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
