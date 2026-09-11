@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import tempfile
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Self
 
@@ -15,6 +17,7 @@ from offline_rag.contracts.retrieval import (
     RetrievalResult,
 )
 from offline_rag.embeddings import QwenSentenceTransformerEmbedding
+from offline_rag.indexing import IngestionJournal
 from offline_rag.ingestion import IngestionService, PreviewReport, build_index_specification
 from offline_rag.organizers import ContextOrganizer, FlatOrganizer
 from offline_rag.retrieval import DenseSimilarityStrategy
@@ -44,11 +47,14 @@ class OfflineRagEngine:
             collection_name=config.vector_store.collection_alias,
         )
         self.index_specification = build_index_specification(config, self.embedding.specification)
+        self.journal = IngestionJournal(Path(config.runtime.work_dir) / "ingestion.sqlite3")
+        self.journal.recover_interrupted_jobs()
         self.ingestion = IngestionService(
             config,
             embedding=self.embedding,
             vector_store=self.vector_store,
             token_counter=self.embedding.count_tokens,
+            journal=self.journal,
         )
 
     @classmethod
@@ -61,7 +67,65 @@ class OfflineRagEngine:
         )
 
     def build(self, *inputs: str | Path) -> IngestionReport:
-        return self.ingestion.build(inputs, self.index_specification)
+        return self.rebuild(*inputs)
+
+    def rebuild(self, *inputs: str | Path) -> IngestionReport:
+        version = f"{self.index_specification.fingerprint()[:8]}-{time.time_ns()}"
+        staging = self.vector_store.create_staging(self.index_specification, version=version)
+        work_dir = Path(self.config.runtime.work_dir)
+        work_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            with (
+                tempfile.TemporaryDirectory(prefix="staging-journal-", dir=work_dir) as directory,
+                IngestionJournal(Path(directory) / "journal.sqlite3") as staging_journal,
+            ):
+                service = IngestionService(
+                    self.config,
+                    embedding=self.embedding,
+                    vector_store=staging,
+                    token_counter=self.embedding.count_tokens,
+                    journal=staging_journal,
+                )
+                report = service.build(inputs, self.index_specification)
+                if report.failed_count:
+                    self.vector_store.drop_collection(staging.collection_name)
+                    return report
+                if staging.point_count() != report.chunk_count:
+                    self.vector_store.drop_collection(staging.collection_name)
+                    raise RuntimeError(
+                        "staging collection point count does not match the ingestion report"
+                    )
+                snapshot = staging_journal.list_sources()
+                self.journal.save_collection_snapshot(staging.collection_name, snapshot)
+                self.vector_store.activate_staging(staging)
+                job_id = self.journal.start_job(report.index_version)
+                try:
+                    self.journal.replace_sources(snapshot)
+                    self.journal.finish_job(job_id)
+                except Exception:
+                    self.journal.finish_job(job_id, status="failed")
+                    raise
+                return replace(report, job_id=job_id)
+        except Exception:
+            if self.vector_store.active_collection() != staging.collection_name:
+                self.vector_store.drop_collection(staging.collection_name)
+            raise
+
+    def activate(self, collection_name: str) -> None:
+        """Roll back or forward to a retained compatible physical collection."""
+
+        view = self.vector_store.collection(collection_name)
+        view.ensure_index(self.index_specification)
+        if not self.journal.has_collection_snapshot(collection_name):
+            raise ValueError(
+                f"no ingestion journal snapshot exists for collection: {collection_name}"
+            )
+        snapshot = self.journal.collection_snapshot(collection_name)
+        self.vector_store.activate_staging(collection_name)
+        self.journal.replace_sources(snapshot)
+
+    def sync(self, *inputs: str | Path) -> IngestionReport:
+        return self.ingestion.sync(inputs, self.index_specification)
 
     def query(self, query: str, *, profile: str = "fast") -> RetrievalResult:
         started = time.perf_counter()
@@ -118,6 +182,7 @@ class OfflineRagEngine:
         )
 
     def close(self) -> None:
+        self.journal.close()
         self.vector_store.close()
 
     def __enter__(self) -> Self:

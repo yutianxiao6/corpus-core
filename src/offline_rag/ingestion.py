@@ -43,6 +43,7 @@ from offline_rag.contracts.indexing import (
     VectorRecord,
 )
 from offline_rag.exceptions import ConfigurationError, OfflineRagError, UnsupportedDocumentError
+from offline_rag.indexing import IndexedSource, IngestionJournal, plan_sync
 from offline_rag.loaders import DocxLoader, MarkdownLoader, PdfLoader, TextLoader
 from offline_rag.parsers import (
     DocxParser,
@@ -104,11 +105,13 @@ class IngestionService:
         embedding: EmbeddingProvider | None = None,
         vector_store: VectorStorePort | None = None,
         token_counter: Callable[[str], int] | None = None,
+        journal: IngestionJournal | None = None,
     ) -> None:
         self._config = config
         self._embedding = embedding
         self._vector_store = vector_store
         self._token_counter = token_counter
+        self._journal = journal
         self._text_loader = TextLoader()
         self._markdown_loader = MarkdownLoader()
         self._pdf_loader = PdfLoader()
@@ -151,57 +154,219 @@ class IngestionService:
         if self._embedding is None or self._vector_store is None:
             raise RuntimeError("build requires embedding and vector_store components")
         started = time.perf_counter()
-        self._vector_store.ensure_index(specification)
-        preview = self.preview(inputs, root=root)
-        results: list[IngestionItemResult] = [
-            IngestionItemResult(
-                source_uri=failure.source_uri,
-                stage=IngestionStage.FAILED,
-                failure=failure,
-            )
-            for failure in preview.failures
-        ]
-        for item in preview.items:
-            item_started = time.perf_counter()
-            try:
-                vectors = self._embedding.embed_documents(
-                    [chunk.embedding_text for chunk in item.chunks]
-                )
-                if len(vectors) != len(item.chunks):
-                    raise RuntimeError("embedding batch size does not match chunk count")
-                records = [
-                    VectorRecord(chunk.chunk_id, vector, chunk_to_payload(chunk))
-                    for chunk, vector in zip(item.chunks, vectors, strict=True)
-                ]
-                batch_size = self._config.ingestion.commit_batch_size
-                for offset in range(0, len(records), batch_size):
-                    self._vector_store.upsert(records[offset : offset + batch_size])
+        index_version = specification.fingerprint()[:16]
+        job_id = self._start_job(index_version, prefix="build")
+        results: list[IngestionItemResult] = []
+        try:
+            self._vector_store.ensure_index(specification)
+            preview = self.preview(inputs, root=root)
+            for failure in preview.failures:
                 results.append(
                     IngestionItemResult(
-                        source_uri=item.source.uri,
-                        stage=IngestionStage.INDEXED,
-                        chunk_count=len(item.chunks),
-                        duration_ms=(time.perf_counter() - item_started) * 1000,
-                    )
-                )
-            except Exception as exc:
-                failure = self._failure(item.source.uri, IngestionStage.EMBEDDED, exc)
-                if not self._config.ingestion.continue_on_error:
-                    raise
-                results.append(
-                    IngestionItemResult(
-                        source_uri=item.source.uri,
+                        source_uri=failure.source_uri,
                         stage=IngestionStage.FAILED,
-                        duration_ms=(time.perf_counter() - item_started) * 1000,
                         failure=failure,
                     )
                 )
+                self._record_failure(job_id, None, failure)
+            for item in preview.items:
+                results.append(self._index_item(job_id, item, index_version=index_version))
+        except Exception:
+            self._finish_job(job_id, "failed")
+            raise
+        self._finish_job(
+            job_id,
+            "completed_with_errors"
+            if any(result.stage is IngestionStage.FAILED for result in results)
+            else "completed",
+        )
         return IngestionReport(
-            job_id=f"build-{time.time_ns()}",
-            index_version=specification.fingerprint()[:16],
+            job_id=job_id,
+            index_version=index_version,
             items=results,
             duration_ms=(time.perf_counter() - started) * 1000,
         )
+
+    def sync(
+        self,
+        inputs: Sequence[str | Path],
+        specification: IndexSpecification,
+        *,
+        root: str | Path | None = None,
+    ) -> IngestionReport:
+        if self._embedding is None or self._vector_store is None or self._journal is None:
+            raise RuntimeError("sync requires embedding, vector_store and journal components")
+        started = time.perf_counter()
+        index_version = specification.fingerprint()[:16]
+        job_id = self._start_job(index_version, prefix="sync")
+        results: list[IngestionItemResult] = []
+        try:
+            self._vector_store.ensure_index(specification)
+            discovered = tuple(self._sources(inputs, root=root))
+            plan = plan_sync(discovered, self._journal.list_sources())
+            for source, _previous in plan.unchanged:
+                results.append(
+                    IngestionItemResult(source_uri=source.uri, stage=IngestionStage.SKIPPED)
+                )
+                self._journal.record_event(
+                    job_id,
+                    source_uri=source.uri,
+                    source_id=source.source_id,
+                    stage=IngestionStage.SKIPPED,
+                )
+            for source in plan.new:
+                results.append(self._prepare_and_index(job_id, source, index_version))
+            for source, previous in plan.modified:
+                result = self._prepare_and_index(job_id, source, index_version, previous=previous)
+                results.append(result)
+            if self._config.ingestion.delete_missing_on_sync:
+                for previous in plan.missing:
+                    self._vector_store.delete(previous.chunk_ids)
+                    self._journal.remove_source(previous.source_id)
+                    self._journal.record_event(
+                        job_id,
+                        source_uri=previous.source_uri,
+                        source_id=previous.source_id,
+                        stage=IngestionStage.DELETED,
+                    )
+                    results.append(
+                        IngestionItemResult(
+                            source_uri=previous.source_uri,
+                            stage=IngestionStage.DELETED,
+                        )
+                    )
+        except Exception:
+            self._finish_job(job_id, "failed")
+            raise
+        self._finish_job(
+            job_id,
+            "completed_with_errors"
+            if any(result.stage is IngestionStage.FAILED for result in results)
+            else "completed",
+        )
+        return IngestionReport(
+            job_id=job_id,
+            index_version=index_version,
+            items=results,
+            duration_ms=(time.perf_counter() - started) * 1000,
+        )
+
+    def _prepare_and_index(
+        self,
+        job_id: str,
+        source: SourceDescriptor,
+        index_version: str,
+        *,
+        previous: IndexedSource | None = None,
+    ) -> IngestionItemResult:
+        started = time.perf_counter()
+        try:
+            document = self._parse(source)
+            item = PreviewItem(source, document, self._chunk(document))
+            result = self._index_item(
+                job_id,
+                item,
+                index_version=index_version,
+                record_journal=previous is None,
+            )
+            if result.stage is IngestionStage.FAILED:
+                return result
+            if previous is not None and self._vector_store is not None:
+                current_ids = {chunk.chunk_id for chunk in item.chunks}
+                stale_ids = tuple(
+                    chunk_id for chunk_id in previous.chunk_ids if chunk_id not in current_ids
+                )
+                self._vector_store.delete(stale_ids)
+                if self._journal is not None:
+                    self._journal.record_indexed(
+                        job_id,
+                        item.source,
+                        document_id=item.document.document_id,
+                        chunk_ids=tuple(chunk.chunk_id for chunk in item.chunks),
+                        index_version=index_version,
+                    )
+            return result
+        except Exception as exc:
+            failure = self._failure(source.uri, IngestionStage.EMBEDDED, exc)
+            self._record_failure(job_id, source.source_id, failure)
+            if not self._config.ingestion.continue_on_error:
+                raise
+            return IngestionItemResult(
+                source_uri=source.uri,
+                stage=IngestionStage.FAILED,
+                duration_ms=(time.perf_counter() - started) * 1000,
+                failure=failure,
+            )
+
+    def _index_item(
+        self,
+        job_id: str,
+        item: PreviewItem,
+        *,
+        index_version: str,
+        record_journal: bool = True,
+    ) -> IngestionItemResult:
+        if self._embedding is None or self._vector_store is None:
+            raise RuntimeError("indexing components are not configured")
+        item_started = time.perf_counter()
+        try:
+            vectors = self._embedding.embed_documents(
+                [chunk.embedding_text for chunk in item.chunks]
+            )
+            if len(vectors) != len(item.chunks):
+                raise RuntimeError("embedding batch size does not match chunk count")
+            records = [
+                VectorRecord(chunk.chunk_id, vector, chunk_to_payload(chunk))
+                for chunk, vector in zip(item.chunks, vectors, strict=True)
+            ]
+            batch_size = self._config.ingestion.commit_batch_size
+            for offset in range(0, len(records), batch_size):
+                self._vector_store.upsert(records[offset : offset + batch_size])
+            if self._journal is not None and record_journal:
+                self._journal.record_indexed(
+                    job_id,
+                    item.source,
+                    document_id=item.document.document_id,
+                    chunk_ids=tuple(chunk.chunk_id for chunk in item.chunks),
+                    index_version=index_version,
+                )
+            return IngestionItemResult(
+                source_uri=item.source.uri,
+                stage=IngestionStage.INDEXED,
+                chunk_count=len(item.chunks),
+                duration_ms=(time.perf_counter() - item_started) * 1000,
+            )
+        except Exception as exc:
+            failure = self._failure(item.source.uri, IngestionStage.EMBEDDED, exc)
+            self._record_failure(job_id, item.source.source_id, failure)
+            if not self._config.ingestion.continue_on_error:
+                raise
+            return IngestionItemResult(
+                source_uri=item.source.uri,
+                stage=IngestionStage.FAILED,
+                duration_ms=(time.perf_counter() - item_started) * 1000,
+                failure=failure,
+            )
+
+    def _start_job(self, index_version: str, *, prefix: str) -> str:
+        if self._journal is not None:
+            return self._journal.start_job(index_version)
+        return f"{prefix}-{time.time_ns()}"
+
+    def _finish_job(self, job_id: str, status: str) -> None:
+        if self._journal is not None:
+            self._journal.finish_job(job_id, status=status)
+
+    def _record_failure(self, job_id: str, source_id: str | None, failure: ItemFailure) -> None:
+        if self._journal is not None:
+            self._journal.record_event(
+                job_id,
+                source_uri=failure.source_uri,
+                source_id=source_id,
+                stage=IngestionStage.FAILED,
+                error_code=failure.error_code,
+                message=failure.message,
+            )
 
     def _sources(
         self, inputs: Sequence[str | Path], *, root: str | Path | None

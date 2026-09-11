@@ -58,3 +58,5 @@ rag-index --config rag.yaml query "如何离线安装？" --profile fast --json
 `build` 和 `query` 只读取配置指定的本地模型，不会自动下载。Python 查询接口、Qdrant Local 限制和引用结果见 [docs/querying.md](docs/querying.md)。
 
 Manifest、单文件 sidecar 与组合路由见 [docs/import-modes.md](docs/import-modes.md)。
+
+增量同步、journal、中断恢复、staging alias 和回滚见 [docs/index-lifecycle.md](docs/index-lifecycle.md)。

@@ -95,6 +95,7 @@ class IngestionStage(StrEnum):
     CHUNKED = "chunked"
     EMBEDDED = "embedded"
     INDEXED = "indexed"
+    DELETED = "deleted"
     SKIPPED = "skipped"
     FAILED = "failed"
 

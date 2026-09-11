@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import uuid
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -37,6 +38,106 @@ class QdrantLocalVectorStore:
         self._collection_name = collection_name
         self._client = QdrantClient(path=str(self._path))
         self._lock = RLock()
+        self._owns_client = True
+
+    @property
+    def collection_name(self) -> str:
+        return self._collection_name
+
+    def create_staging(
+        self, specification: IndexSpecification, *, version: str
+    ) -> QdrantLocalVectorStore:
+        normalized_version = re.sub(r"[^a-zA-Z0-9_-]+", "-", version).strip("-")
+        if not normalized_version:
+            raise ValueError("staging version must contain a letter or number")
+        collection_name = f"{self._collection_name}__{normalized_version}"
+        with self._lock:
+            if self._physical_collection_exists(collection_name):
+                raise VectorStoreError(f"staging collection already exists: {collection_name}")
+        staging = self.collection(collection_name)
+        staging.ensure_index(specification)
+        return staging
+
+    def activate_staging(self, staging: QdrantLocalVectorStore | str) -> None:
+        collection_name = (
+            staging.collection_name if isinstance(staging, QdrantLocalVectorStore) else staging
+        )
+        with self._lock:
+            try:
+                if not self._physical_collection_exists(collection_name):
+                    raise VectorStoreError(f"staging collection does not exist: {collection_name}")
+                if self._physical_collection_exists(self._collection_name):
+                    raise VectorStoreError(
+                        "active name is a physical collection and cannot be used as an alias"
+                    )
+                aliases = {
+                    item.alias_name: item.collection_name
+                    for item in self._client.get_aliases().aliases
+                }
+                if aliases.get(self._collection_name) == collection_name:
+                    return
+                operations: list[models.CreateAliasOperation | models.DeleteAliasOperation] = []
+                if self._collection_name in aliases:
+                    operations.append(
+                        models.DeleteAliasOperation(
+                            delete_alias=models.DeleteAlias(alias_name=self._collection_name)
+                        )
+                    )
+                operations.append(
+                    models.CreateAliasOperation(
+                        create_alias=models.CreateAlias(
+                            collection_name=collection_name,
+                            alias_name=self._collection_name,
+                        )
+                    )
+                )
+                self._client.update_collection_aliases(operations)
+            except VectorStoreError:
+                raise
+            except Exception as exc:
+                raise VectorStoreError("cannot atomically activate staging collection") from exc
+
+    def active_collection(self) -> str | None:
+        with self._lock:
+            aliases = {
+                item.alias_name: item.collection_name for item in self._client.get_aliases().aliases
+            }
+        return aliases.get(self._collection_name)
+
+    def point_count(self) -> int:
+        with self._lock:
+            try:
+                return int(self._client.get_collection(self._collection_name).points_count or 0)
+            except Exception as exc:
+                raise VectorStoreError("cannot read Qdrant collection size") from exc
+
+    def drop_collection(self, collection_name: str) -> None:
+        if collection_name == self._collection_name:
+            raise VectorStoreError("refusing to drop the configured active name")
+        with self._lock:
+            try:
+                if self._physical_collection_exists(collection_name):
+                    self._client.delete_collection(collection_name)
+            except Exception as exc:
+                raise VectorStoreError("cannot drop Qdrant collection") from exc
+
+    def collection(self, collection_name: str) -> QdrantLocalVectorStore:
+        """Return a non-owning view backed by this instance's single local client."""
+
+        if not collection_name.strip():
+            raise ValueError("collection_name must not be empty")
+        view = object.__new__(QdrantLocalVectorStore)
+        view._path = self._path
+        view._collection_name = collection_name
+        view._client = self._client
+        view._lock = self._lock
+        view._owns_client = False
+        return view
+
+    def _physical_collection_exists(self, collection_name: str) -> bool:
+        return any(
+            item.name == collection_name for item in self._client.get_collections().collections
+        )
 
     def ensure_index(self, specification: IndexSpecification) -> None:
         fingerprint = specification.fingerprint()
@@ -135,8 +236,9 @@ class QdrantLocalVectorStore:
         return await asyncio.to_thread(self.search, request)
 
     def close(self) -> None:
-        with self._lock:
-            self._client.close()
+        if self._owns_client:
+            with self._lock:
+                self._client.close()
 
     def __enter__(self) -> Self:
         return self

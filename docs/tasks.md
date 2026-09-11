@@ -15,7 +15,7 @@
 |---|---:|---:|---:|
 | P0 | 13 | 0 | 0 |
 | P1 | 20 | 0 | 0 |
-| P2 | 9 | 0 | 10 |
+| P2 | 12 | 0 | 7 |
 | P3 | 0 | 0 | 10 |
 
 ## P0：架构基础
@@ -91,9 +91,9 @@
 - [x] `P2-007` 实现 Page Aware、Paragraph Packing 和 Table Row chunker。
 - [x] `P2-008` 实现 Parent Child chunker 与 parent 存储。
 - [x] `P2-009` 实现内容去重和近似重复检测。
-- [ ] `P2-010` 实现导入状态机、journal 和中断恢复。
-- [ ] `P2-011` 实现幂等增量新增、修改和删除同步。
-- [ ] `P2-012` 实现 staging collection、alias 切换和回滚。
+- [x] `P2-010` 实现导入状态机、journal 和中断恢复。
+- [x] `P2-011` 实现幂等增量新增、修改和删除同步。
+- [x] `P2-012` 实现 staging collection、alias 切换和回滚。
 - [ ] `P2-013` 实现 sparse vector 与 hybrid 检索。
 - [ ] `P2-014` 实现 RRF 和归一化加权融合。
 - [ ] `P2-015` 实现 Qwen3 本地 reranker。

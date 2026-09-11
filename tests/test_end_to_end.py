@@ -15,6 +15,7 @@ from offline_rag.config.models import (
 )
 from offline_rag.contracts.indexing import DistanceMetric, EmbeddingSpecification
 from offline_rag.contracts.retrieval import RetrievalOptions, RetrievalRequest
+from offline_rag.indexing import IngestionJournal
 from offline_rag.ingestion import IngestionService, build_index_specification
 from offline_rag.ports import Vector
 from offline_rag.retrieval import DenseSimilarityStrategy
@@ -94,6 +95,96 @@ class OfflineEndToEndTests(unittest.TestCase):
         self.assertGreaterEqual(report.chunk_count, 2)
         self.assertEqual(len(candidates), 1)
         self.assertIn("install", candidates[0].chunk.content.lower())
+
+    def test_incremental_sync_handles_unchanged_modified_new_and_deleted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            documents = root / "documents"
+            documents.mkdir()
+            first = documents / "first.txt"
+            removed = documents / "removed.txt"
+            first.write_text("original content", encoding="utf-8")
+            removed.write_text("remove this content", encoding="utf-8")
+            config = RagConfig(
+                embedding=EmbeddingConfig(dimension=3),
+                vector_store=VectorStoreConfig(path=str(root / "qdrant")),
+                chunk_profiles={
+                    "default": RecursiveChunkProfile(
+                        type="recursive", chunk_size=100, chunk_overlap=10, minimum_size=0
+                    )
+                },
+            )
+            embedding = KeywordEmbedding()
+            specification = build_index_specification(config, embedding.specification)
+            with (
+                QdrantLocalVectorStore(root / "qdrant") as store,
+                IngestionJournal(root / "journal.sqlite3") as journal,
+            ):
+                service = IngestionService(
+                    config, embedding=embedding, vector_store=store, journal=journal
+                )
+                initial = service.build([documents], specification)
+                unchanged = service.sync([documents], specification)
+                old_first = next(
+                    item for item in journal.list_sources() if item.relative_path == "first.txt"
+                )
+
+                first.write_text("modified install content", encoding="utf-8")
+                removed.unlink()
+                (documents / "new.txt").write_text("brand new content", encoding="utf-8")
+                changed = service.sync([documents], specification)
+                indexed = journal.list_sources()
+
+                self.assertEqual(initial.indexed_count, 2)
+                self.assertTrue(all(item.stage.value == "skipped" for item in unchanged.items))
+                self.assertEqual(
+                    sorted(item.stage.value for item in changed.items),
+                    ["deleted", "indexed", "indexed"],
+                )
+                self.assertEqual({item.relative_path for item in indexed}, {"first.txt", "new.txt"})
+                current_first = next(item for item in indexed if item.relative_path == "first.txt")
+                self.assertNotEqual(current_first.chunk_ids, old_first.chunk_ids)
+
+    def test_failed_modified_source_keeps_previous_journal_version(self) -> None:
+        class FailingEmbedding(KeywordEmbedding):
+            def embed_documents(self, texts: Sequence[str]) -> Sequence[Vector]:
+                if any("FAIL" in text for text in texts):
+                    raise RuntimeError("fixture failure")
+                return super().embed_documents(texts)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            documents = root / "documents"
+            documents.mkdir()
+            path = documents / "source.txt"
+            path.write_text("healthy", encoding="utf-8")
+            config = RagConfig(
+                embedding=EmbeddingConfig(dimension=3),
+                vector_store=VectorStoreConfig(path=str(root / "qdrant")),
+                chunk_profiles={
+                    "default": RecursiveChunkProfile(
+                        type="recursive", chunk_size=100, chunk_overlap=10, minimum_size=0
+                    )
+                },
+            )
+            embedding = FailingEmbedding()
+            specification = build_index_specification(config, embedding.specification)
+            with (
+                QdrantLocalVectorStore(root / "qdrant") as store,
+                IngestionJournal(root / "journal.sqlite3") as journal,
+            ):
+                service = IngestionService(
+                    config, embedding=embedding, vector_store=store, journal=journal
+                )
+                service.build([documents], specification)
+                prior = journal.list_sources()[0]
+                path.write_text("FAIL replacement", encoding="utf-8")
+                report = service.sync([documents], specification)
+                retained = journal.list_sources()[0]
+
+        self.assertEqual(report.failed_count, 1)
+        self.assertEqual(retained.content_hash, prior.content_hash)
+        self.assertEqual(retained.chunk_ids, prior.chunk_ids)
 
 
 if __name__ == "__main__":

@@ -100,6 +100,33 @@ class QdrantLocalTests(unittest.TestCase):
             self.assertEqual(store.upsert([]).completed_count, 0)
             self.assertEqual(store.delete([]).deleted_count, 0)
 
+    def test_staging_alias_switch_and_rollback_keep_complete_collections(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            specification = make_index_specification()
+            first_chunk = make_chunk("first", "doc-1", "first version", 0)
+            second_chunk = make_chunk("second", "doc-2", "second version", 0)
+            with QdrantLocalVectorStore(directory, collection_name="active") as store:
+                first = store.create_staging(specification, version="v1")
+                first.upsert(
+                    [VectorRecord("first", [1.0, 0.0, 0.0], chunk_to_payload(first_chunk))]
+                )
+                store.activate_staging(first)
+                self.assertEqual(store.active_collection(), "active__v1")
+                self.assertEqual(store.point_count(), 1)
+
+                second = store.create_staging(specification, version="v2")
+                second.upsert(
+                    [VectorRecord("second", [0.0, 1.0, 0.0], chunk_to_payload(second_chunk))]
+                )
+                store.activate_staging(second)
+                self.assertEqual(store.active_collection(), "active__v2")
+                self.assertEqual(store.point_count(), 1)
+
+                store.activate_staging("active__v1")
+                self.assertEqual(store.active_collection(), "active__v1")
+                hits = store.search(SearchRequest([1.0, 0.0, 0.0], limit=2))
+                self.assertEqual([hit.chunk_id for hit in hits], ["first"])
+
 
 if __name__ == "__main__":
     unittest.main()

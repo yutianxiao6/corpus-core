@@ -44,6 +44,21 @@ def build_parser() -> argparse.ArgumentParser:
     build_command.add_argument("inputs", nargs="+", type=Path)
     build_command.add_argument("--json", action="store_true")
 
+    sync_command = subparsers.add_parser("sync", help="incrementally synchronize an index")
+    sync_command.add_argument("inputs", nargs="+", type=Path)
+    sync_command.add_argument("--json", action="store_true")
+
+    rebuild_command = subparsers.add_parser(
+        "rebuild", help="build a staging collection and atomically activate it"
+    )
+    rebuild_command.add_argument("inputs", nargs="+", type=Path)
+    rebuild_command.add_argument("--json", action="store_true")
+
+    activate_command = subparsers.add_parser(
+        "activate", help="activate a retained compatible collection"
+    )
+    activate_command.add_argument("collection_name")
+
     query_parser = subparsers.add_parser("query", help="run a retrieval-only debug query")
     query_parser.add_argument("query")
     query_parser.add_argument("--profile", default="fast")
@@ -66,7 +81,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "preview":
             return _preview(config, args.inputs, show_content=args.show_content, as_json=args.json)
         if args.command == "build":
-            return _build(config, args.inputs, as_json=args.json)
+            return _index(config, args.inputs, operation="build", as_json=args.json)
+        if args.command == "sync":
+            return _index(config, args.inputs, operation="sync", as_json=args.json)
+        if args.command == "rebuild":
+            return _index(config, args.inputs, operation="rebuild", as_json=args.json)
+        if args.command == "activate":
+            return _activate(config, args.collection_name)
         if args.command == "query":
             return _query(config, args.query, profile=args.profile, as_json=args.json)
         if args.command == "doctor":
@@ -126,11 +147,17 @@ def _preview(
     return 1 if report.failures else 0
 
 
-def _build(config: RagConfig, inputs: list[Path], *, as_json: bool) -> int:
+def _index(
+    config: RagConfig,
+    inputs: list[Path],
+    *,
+    operation: str,
+    as_json: bool,
+) -> int:
     from offline_rag.engine import OfflineRagEngine
 
     with OfflineRagEngine.from_config(config) as engine:
-        report = engine.build(*inputs)
+        report = engine.sync(*inputs) if operation == "sync" else engine.rebuild(*inputs)
     data = {
         "job_id": report.job_id,
         "index_version": report.index_version,
@@ -141,6 +168,15 @@ def _build(config: RagConfig, inputs: list[Path], *, as_json: bool) -> int:
     }
     _print_data(data, as_json=as_json)
     return 1 if report.failed_count else 0
+
+
+def _activate(config: RagConfig, collection_name: str) -> int:
+    from offline_rag.engine import OfflineRagEngine
+
+    with OfflineRagEngine.from_config(config) as engine:
+        engine.activate(collection_name)
+    print(f"activated: {collection_name}")
+    return 0
 
 
 def _query(config: RagConfig, query: str, *, profile: str, as_json: bool) -> int:
