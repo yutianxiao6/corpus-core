@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Self
 if TYPE_CHECKING:
     from offline_rag.langchain import OfflineRagLangChainRetriever
 
+from offline_rag.concurrency import AsyncMicroBatcher, QueuedEmbeddingProvider, QueuedReranker
 from offline_rag.config.models import OrganizerConfig, RagConfig, RerankerConfig, RetrievalProfile
 from offline_rag.contracts.common import JSONValue
 from offline_rag.contracts.indexing import IngestionReport
@@ -71,6 +72,20 @@ class OfflineRagEngine:
             max_length=embedding_config.max_length,
             query_instruction=embedding_config.query_instruction,
             device=embedding_config.device,
+        )
+        concurrency = config.query_concurrency
+        self.query_embedding = QueuedEmbeddingProvider(
+            self.embedding,
+            AsyncMicroBatcher(
+                self.embedding.embed_queries,
+                max_batch_size=concurrency.embedding_microbatch_size,
+                max_wait_ms=concurrency.embedding_wait_ms,
+                workers=concurrency.embedding_workers,
+                queue_capacity=concurrency.queue_capacity,
+                enqueue_timeout_seconds=concurrency.enqueue_timeout_seconds,
+                execution_timeout_seconds=concurrency.execution_timeout_seconds,
+                name="embedding",
+            ),
         )
         sparse_config = config.sparse_embedding
         self.sparse_embedding = (
@@ -401,7 +416,7 @@ class OfflineRagEngine:
         strategy: RetrievalStrategy
         if retrieval_profile.strategy == "dense":
             strategy = DenseSimilarityStrategy(
-                self.embedding,
+                self.query_embedding,
                 self.vector_store,
                 fetch_k=retrieval_profile.fetch_k or retrieval_profile.final_k,
             )
@@ -420,7 +435,7 @@ class OfflineRagEngine:
                 raise ValueError("hybrid retrieval requires sparse embedding and fusion")
             fusion = retrieval_profile.fusion
             strategy = HybridRetrievalStrategy(
-                self.embedding,
+                self.query_embedding,
                 self.sparse_embedding,
                 self.vector_store,
                 dense_fetch_k=retrieval_profile.dense_fetch_k
@@ -491,7 +506,7 @@ class OfflineRagEngine:
         candidates = score_threshold_filter(candidates, profile.score_threshold)
         candidates = limit_per_document(candidates, profile.maximum_chunks_per_document)
         if profile.mmr_lambda is not None:
-            candidates = MaximalMarginalRelevanceSelector(self.embedding).select(
+            candidates = MaximalMarginalRelevanceSelector(self.query_embedding).select(
                 query,
                 candidates,
                 limit=profile.final_k,
@@ -514,7 +529,7 @@ class OfflineRagEngine:
         candidates = score_threshold_filter(candidates, profile.score_threshold)
         candidates = limit_per_document(candidates, profile.maximum_chunks_per_document)
         if profile.mmr_lambda is not None:
-            candidates = await MaximalMarginalRelevanceSelector(self.embedding).aselect(
+            candidates = await MaximalMarginalRelevanceSelector(self.query_embedding).aselect(
                 query,
                 candidates,
                 limit=profile.final_k,
@@ -637,7 +652,7 @@ class OfflineRagEngine:
             return cached
         if config.provider != QwenCrossEncoderReranker.provider_name:
             raise ValueError(f"unsupported reranker provider: {config.provider}")
-        reranker = QwenCrossEncoderReranker(
+        raw_reranker = QwenCrossEncoderReranker(
             config.model_path,
             revision=config.model_revision,
             device=config.device,
@@ -646,6 +661,20 @@ class OfflineRagEngine:
             maximum_candidates=config.maximum_candidates,
             instruction=config.instruction,
             score_mode=config.score_mode,
+        )
+        concurrency = self.config.query_concurrency
+        reranker = QueuedReranker(
+            raw_reranker,
+            AsyncMicroBatcher(
+                raw_reranker.rerank_batch,
+                max_batch_size=concurrency.reranker_microbatch_size,
+                max_wait_ms=concurrency.reranker_wait_ms,
+                workers=concurrency.reranker_workers,
+                queue_capacity=concurrency.queue_capacity,
+                enqueue_timeout_seconds=concurrency.enqueue_timeout_seconds,
+                execution_timeout_seconds=concurrency.execution_timeout_seconds,
+                name=f"reranker-{name}",
+            ),
         )
         self._reranker_cache[name] = reranker
         return reranker
@@ -696,12 +725,32 @@ class OfflineRagEngine:
         )
 
     def close(self) -> None:
+        async def close_queues() -> None:
+            await self._aclose_inference_queues()
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(close_queues())
+        else:
+            loop.create_task(close_queues())
         self.journal.close()
         self.vector_store.close()
 
     async def aclose(self) -> None:
+        await self._aclose_inference_queues()
         self.journal.close()
         await self.vector_store.aclose()
+
+    async def _aclose_inference_queues(self) -> None:
+        await self.query_embedding.aclose()
+        await asyncio.gather(
+            *(
+                reranker.aclose()
+                for reranker in self._reranker_cache.values()
+                if isinstance(reranker, QueuedReranker)
+            )
+        )
 
     def __enter__(self) -> Self:
         return self

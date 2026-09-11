@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import math
 import tempfile
 import unittest
@@ -7,6 +8,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from unittest.mock import patch
 
+from offline_rag.concurrency import AsyncMicroBatcher, QueuedReranker
 from offline_rag.contracts.chunks import Chunk
 from offline_rag.contracts.retrieval import RetrievalCandidate
 from offline_rag.exceptions import OfflineResourceMissingError, RerankerError
@@ -34,8 +36,10 @@ class ModelFixture:
         self.scores = scores
         self.inputs: Sequence[tuple[str, str]] = ()
         self.options: dict[str, object] = {}
+        self.calls = 0
 
     def predict(self, inputs: Sequence[tuple[str, str]], **kwargs: object) -> object:
+        self.calls += 1
         self.inputs = inputs
         self.options = kwargs
         return self.scores
@@ -77,6 +81,57 @@ class RerankerTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0].rerank_score, 5.0)
+
+    async def test_batch_flattens_pairs_into_one_model_prediction(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            model = ModelFixture([0.1, 0.9, 0.8])
+            reranker = QwenCrossEncoderReranker(
+                directory, model=model, maximum_candidates=3, score_mode="raw"
+            )
+
+            results = reranker.rerank_batch(
+                (
+                    ("first", [candidate("a", 1), candidate("b", 2)], 2),
+                    ("second", [candidate("c", 3)], 1),
+                )
+            )
+
+        self.assertEqual(len(results), 2)
+        self.assertEqual([item.chunk.chunk_id for item in results[0]], ["b", "a"])
+        self.assertEqual([item.chunk.chunk_id for item in results[1]], ["c"])
+        self.assertEqual(len(model.inputs), 3)
+        self.assertEqual(model.inputs[2][0], "second")
+
+    async def test_queued_reranking_microbatches_concurrent_requests(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            model = ModelFixture([0.1, 0.9, 0.8, 0.2])
+            reranker = QwenCrossEncoderReranker(
+                directory, model=model, maximum_candidates=2, score_mode="raw"
+            )
+            queued = QueuedReranker(
+                reranker,
+                AsyncMicroBatcher(
+                    reranker.rerank_batch,
+                    max_batch_size=4,
+                    max_wait_ms=20,
+                    workers=1,
+                    queue_capacity=8,
+                    enqueue_timeout_seconds=1,
+                    execution_timeout_seconds=1,
+                    name="reranker",
+                ),
+            )
+            inputs = [candidate("a", 1), candidate("b", 2)]
+            try:
+                results = await asyncio.gather(
+                    queued.arerank("first", inputs), queued.arerank("second", inputs)
+                )
+            finally:
+                await queued.aclose()
+
+        self.assertEqual(len(results), 2)
+        self.assertEqual(model.calls, 1)
+        self.assertEqual(len(model.inputs), 4)
 
     async def test_invalid_model_output_is_wrapped(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

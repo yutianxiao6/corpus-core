@@ -67,18 +67,33 @@ class QwenCrossEncoderReranker:
         *,
         top_n: int | None = None,
     ) -> Sequence[RetrievalCandidate]:
-        if not query.strip():
-            raise RerankerError("reranker query must not be empty")
-        if not candidates:
+        return self.rerank_batch(((query, candidates, top_n),))[0]
+
+    def rerank_batch(
+        self,
+        requests: Sequence[tuple[str, Sequence[RetrievalCandidate], int | None]],
+    ) -> Sequence[Sequence[RetrievalCandidate]]:
+        if not requests:
             return ()
-        limit = len(candidates) if top_n is None else top_n
-        if limit <= 0:
-            raise ValueError("top_n must be positive")
-        selected = tuple(candidates[: min(limit, self._maximum_candidates)])
-        pairs = tuple((query, candidate.chunk.content) for candidate in selected)
+        selected_batches: list[tuple[RetrievalCandidate, ...]] = []
+        pairs: list[tuple[str, str]] = []
+        for query, candidates, top_n in requests:
+            if not query.strip():
+                raise RerankerError("reranker query must not be empty")
+            if not candidates:
+                selected_batches.append(())
+                continue
+            limit = len(candidates) if top_n is None else top_n
+            if limit <= 0:
+                raise ValueError("top_n must be positive")
+            selected = tuple(candidates[: min(limit, self._maximum_candidates)])
+            selected_batches.append(selected)
+            pairs.extend((query, candidate.chunk.content) for candidate in selected)
+        if not pairs:
+            return tuple(() for _request in requests)
         try:
             raw = self._get_model().predict(
-                pairs,
+                tuple(pairs),
                 batch_size=self._batch_size,
                 show_progress_bar=False,
                 convert_to_numpy=True,
@@ -88,11 +103,23 @@ class QwenCrossEncoderReranker:
             raise
         except Exception as exc:
             raise RerankerError("local reranker inference failed") from exc
-        if len(scores) != len(selected):
+        if len(scores) != len(pairs):
             raise RerankerError(
                 "reranker returned an unexpected score count",
-                details={"expected": len(selected), "actual": len(scores)},
+                details={"expected": len(pairs), "actual": len(scores)},
             )
+        results: list[Sequence[RetrievalCandidate]] = []
+        offset = 0
+        for selected in selected_batches:
+            end = offset + len(selected)
+            results.append(self._rank(selected, scores[offset:end]))
+            offset = end
+        return tuple(results)
+
+    @staticmethod
+    def _rank(
+        selected: Sequence[RetrievalCandidate], scores: Sequence[float]
+    ) -> tuple[RetrievalCandidate, ...]:
         reranked = [
             replace(
                 candidate,

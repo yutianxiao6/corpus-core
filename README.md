@@ -2,7 +2,7 @@
 
 Offline RAG Retriever 是一个面向本地部署的通用 Python 检索组件。它负责文档发现、解析、切块、向量化、索引维护、检索、重排和上下文组织；上层问答系统只需要调用检索接口并接入自己的 LLM。
 
-当前已经完成完整 P0/P1 和大部分 P2：多格式解析及多策略切块、可恢复增量索引、Qdrant staging/alias 回滚、dense/sparse/hybrid 检索、RRF/加权融合、本地 Qwen3 rerank、MMR/邻居扩展以及多种上下文组织方式均可使用。
+当前已经完成完整 P0/P1/P2 和前三项 P3：多格式解析及多策略切块、可恢复增量索引、Qdrant staging/alias 回滚、dense/sparse/hybrid 检索、本地 Qwen3 rerank、多种上下文组织方式、Qdrant Server、异步/批量 API 及模型微批队列均可使用。
 
 ## 已确定的边界
 

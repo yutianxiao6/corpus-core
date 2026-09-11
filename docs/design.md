@@ -486,6 +486,17 @@ runtime:
   work_dir: ./data
   cache_dir: ./data/cache
 
+query_concurrency:
+  queue_capacity: 256
+  enqueue_timeout_seconds: 1.0
+  execution_timeout_seconds: 60.0
+  embedding_microbatch_size: 16
+  embedding_wait_ms: 5
+  embedding_workers: 1
+  reranker_microbatch_size: 4
+  reranker_wait_ms: 5
+  reranker_workers: 1
+
 embedding:
   provider: qwen_sentence_transformers
   model_path: ./models/Qwen3-Embedding-0.6B

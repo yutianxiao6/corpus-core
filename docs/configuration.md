@@ -22,6 +22,27 @@ Query profile 是经过启动期校验的默认参数集合。Python `engine.ret
 
 完整字段示例见 [设计文档](design.md#112-完整配置示例)。
 
+## 查询并发与模型微批
+
+异步查询通过两个独立的有界队列控制本地 embedding 和 reranker 模型。短时间内到达的 embedding query 会合并为一次模型 `encode`；多个 rerank 请求会先展平 query-document 对，执行一次 `predict`，再按输入请求拆分结果：
+
+```yaml
+query_concurrency:
+  queue_capacity: 256
+  enqueue_timeout_seconds: 1.0
+  execution_timeout_seconds: 60.0
+  embedding_microbatch_size: 16
+  embedding_wait_ms: 5
+  embedding_workers: 1
+  reranker_microbatch_size: 4
+  reranker_wait_ms: 5
+  reranker_workers: 1
+```
+
+队列满或等待结果超时会抛出错误码为 `concurrent_access` 的 `ConcurrentAccessError`，上层服务可据此返回忙碌状态或执行限次重试。GPU 部署建议从单 worker 开始，结合显存、吞吐和 P95/P99 延迟压测后调整；增加 worker 会提高并行推理数，也会增加显存和内存压力。微批等待窗口用于吞吐与首 token 前延迟之间的折中。
+
+队列按 engine 实例和事件循环所有；企业异步服务应在应用启动时创建一个 engine，并在同一事件循环中复用，关闭时调用 `await engine.aclose()` 或使用 `async with`。多进程服务的每个 worker 各自创建 engine，共享同一个 Qdrant Server。
+
 ## 完全离线 Hybrid
 
 启用内置稀疏编码后，每个 Qdrant point 同时保存 `dense` 和 `sparse` named vectors。编码器使用稳定哈希、次线性词频和 L2 归一化，支持中文单字/双字特征、英文词、数字、路径及 API/产品编号，不需要模型文件或联网下载。

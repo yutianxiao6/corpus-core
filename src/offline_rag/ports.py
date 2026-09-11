@@ -56,6 +56,8 @@ class EmbeddingProvider(Protocol):
 
     def embed_documents(self, texts: Sequence[str]) -> Sequence[Vector]: ...
 
+    def embed_queries(self, texts: Sequence[str]) -> Sequence[Vector]: ...
+
     def embed_query(self, text: str) -> Vector: ...
 
     async def aembed_query(self, text: str) -> Vector: ...
@@ -110,6 +112,11 @@ class Reranker(Protocol):
         *,
         top_n: int | None = None,
     ) -> Sequence[RetrievalCandidate]: ...
+
+    def rerank_batch(
+        self,
+        requests: Sequence[tuple[str, Sequence[RetrievalCandidate], int | None]],
+    ) -> Sequence[Sequence[RetrievalCandidate]]: ...
 
 
 class ResultOrganizer(Protocol):

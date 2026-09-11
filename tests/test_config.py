@@ -114,6 +114,22 @@ class ConfigurationTests(unittest.TestCase):
             with self.assertRaises(ConfigurationError):
                 load_config(invalid)
 
+    def test_query_concurrency_limits_are_strictly_validated(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            valid = self._write(
+                directory,
+                "query_concurrency:\n  queue_capacity: 32\n"
+                "  embedding_microbatch_size: 8\n  embedding_wait_ms: 3\n"
+                "  reranker_workers: 2\n",
+            )
+            config = load_config(valid)
+            self.assertEqual(config.query_concurrency.queue_capacity, 32)
+            self.assertEqual(config.query_concurrency.embedding_microbatch_size, 8)
+
+            invalid = self._write(directory, "query_concurrency:\n  embedding_microbatch_size: 0\n")
+            with self.assertRaises(ConfigurationError):
+                load_config(invalid)
+
 
 if __name__ == "__main__":
     unittest.main()

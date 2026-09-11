@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import tempfile
 import unittest
 from pathlib import Path
 
+from offline_rag.concurrency import AsyncMicroBatcher, QueuedEmbeddingProvider
 from offline_rag.embeddings import QwenSentenceTransformerEmbedding
 from offline_rag.exceptions import EmbeddingError, OfflineResourceMissingError
 
@@ -41,10 +43,12 @@ class EmbeddingAdapterTests(unittest.TestCase):
                 model=fake,
             )
             documents = adapter.embed_documents(["文档一", "document two"])
-            query = adapter.embed_query("如何安装？")
+            queries = adapter.embed_queries(["如何安装？", "How to install?"])
+            query = queries[0]
 
         self.assertEqual(len(documents), 2)
         self.assertEqual(len(query), 3)
+        self.assertEqual(len(queries), 2)
         self.assertNotIn("prompt", fake.calls[0][1])
         self.assertEqual(fake.calls[1][1]["prompt"], "Instruct: 检索回答问题的段落。\nQuery: ")
         self.assertEqual(fake.max_seq_length, 128)
@@ -102,6 +106,37 @@ class AsyncEmbeddingAdapterTests(unittest.IsolatedAsyncioTestCase):
             adapter = QwenSentenceTransformerEmbedding(path, dimension=3, model=FakeSentenceModel())
             vector = await adapter.aembed_query("query")
         self.assertEqual(tuple(vector), (0.0, 1.0, 2.0))
+
+    async def test_queued_queries_share_one_model_encode_call(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "model"
+            path.mkdir()
+            (path / "config.json").write_text("{}", encoding="utf-8")
+            model = FakeSentenceModel()
+            adapter = QwenSentenceTransformerEmbedding(path, dimension=3, model=model)
+            queued = QueuedEmbeddingProvider(
+                adapter,
+                AsyncMicroBatcher(
+                    adapter.embed_queries,
+                    max_batch_size=4,
+                    max_wait_ms=20,
+                    workers=1,
+                    queue_capacity=8,
+                    enqueue_timeout_seconds=1,
+                    execution_timeout_seconds=1,
+                    name="embedding",
+                ),
+            )
+            try:
+                vectors = await asyncio.gather(
+                    queued.aembed_query("first"), queued.aembed_query("second")
+                )
+            finally:
+                await queued.aclose()
+
+        self.assertEqual(len(vectors), 2)
+        self.assertEqual(len(model.calls), 1)
+        self.assertEqual(model.calls[0][0], ("first", "second"))
 
 
 if __name__ == "__main__":

@@ -26,6 +26,18 @@ class RuntimeConfig(StrictModel):
         return self
 
 
+class QueryConcurrencyConfig(StrictModel):
+    queue_capacity: int = Field(default=256, gt=0)
+    enqueue_timeout_seconds: float = Field(default=1.0, gt=0)
+    execution_timeout_seconds: float = Field(default=60.0, gt=0)
+    embedding_microbatch_size: int = Field(default=16, gt=0)
+    embedding_wait_ms: int = Field(default=5, ge=0)
+    embedding_workers: int = Field(default=1, gt=0)
+    reranker_microbatch_size: int = Field(default=4, gt=0)
+    reranker_wait_ms: int = Field(default=5, ge=0)
+    reranker_workers: int = Field(default=1, gt=0)
+
+
 class EmbeddingConfig(StrictModel):
     provider: str = "qwen_sentence_transformers"
     model_path: str = "./models/Qwen3-Embedding-0.6B"
@@ -262,6 +274,7 @@ class RagConfig(StrictModel):
 
     version: Literal[1] = 1
     runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
+    query_concurrency: QueryConcurrencyConfig = Field(default_factory=QueryConcurrencyConfig)
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
     sparse_embedding: SparseEmbeddingConfig | None = None
     vector_store: VectorStoreConfig = Field(default_factory=VectorStoreConfig)

@@ -32,6 +32,9 @@ class EmbeddingFixture:
     def embed_query(self, text: str) -> Vector:
         return (1.0, 0.0)
 
+    def embed_queries(self, texts: Sequence[str]) -> Sequence[Vector]:
+        return tuple(self.embed_query(text) for text in texts)
+
     async def aembed_query(self, text: str) -> Vector:
         return self.embed_query(text)
 
@@ -150,6 +153,7 @@ def make_engine(
     engine = object.__new__(OfflineRagEngine)
     engine.config = config
     engine.embedding = embedding  # type: ignore[assignment]
+    engine.query_embedding = embedding  # type: ignore[assignment]
     engine.vector_store = store  # type: ignore[assignment]
     engine.index_specification = IndexSpecification(
         index_format_version=1,

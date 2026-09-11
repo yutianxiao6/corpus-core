@@ -92,15 +92,19 @@ class QwenSentenceTransformerEmbedding:
         return self._encode(tuple(texts), prompt=None)
 
     def embed_query(self, text: str) -> Vector:
-        if not text.strip():
+        return self.embed_queries((text,))[0]
+
+    def embed_queries(self, texts: Sequence[str]) -> Sequence[Vector]:
+        if not texts:
+            return ()
+        if any(not text.strip() for text in texts):
             raise EmbeddingError("query embedding input must not be empty")
         prompt = (
             f"Instruct: {self._query_instruction}\nQuery: "
             if self._query_instruction
             else "Query: "
         )
-        vectors = self._encode((text,), prompt=prompt)
-        return vectors[0]
+        return self._encode(tuple(texts), prompt=prompt)
 
     async def aembed_query(self, text: str) -> Vector:
         return await asyncio.to_thread(self.embed_query, text)

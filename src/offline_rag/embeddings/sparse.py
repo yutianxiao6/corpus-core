@@ -63,6 +63,9 @@ class HashedLexicalSparseEmbedding:
     def embed_query(self, text: str) -> SparseVector:
         return self._encode(text)
 
+    def embed_queries(self, texts: Sequence[str]) -> Sequence[SparseVector]:
+        return tuple(self._encode(text) for text in texts)
+
     async def aembed_query(self, text: str) -> SparseVector:
         return await asyncio.to_thread(self.embed_query, text)
 
