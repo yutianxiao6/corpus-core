@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import tempfile
 import time
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 from typing import Self
 
-from offline_rag.config.models import OrganizerConfig, RagConfig, RerankerConfig
+from offline_rag.config.models import OrganizerConfig, RagConfig, RerankerConfig, RetrievalProfile
+from offline_rag.contracts.common import JSONValue
 from offline_rag.contracts.indexing import IngestionReport
 from offline_rag.contracts.retrieval import (
     ContextBudget,
+    QueryOverrides,
     RetrievalOptions,
     RetrievalRequest,
     RetrievalResult,
@@ -165,12 +168,53 @@ class OfflineRagEngine:
     def sync(self, *inputs: str | Path) -> IngestionReport:
         return self.ingestion.sync(inputs, self.index_specification)
 
-    def query(self, query: str, *, profile: str = "fast") -> RetrievalResult:
+    def retrieve(
+        self,
+        query: str,
+        *,
+        profile: str = "fast",
+        filters: Mapping[str, JSONValue] | None = None,
+        organizer: str | None = None,
+        final_k: int | None = None,
+        score_threshold: float | None = None,
+        rerank_top_n: int | None = None,
+        mmr_lambda: float | None = None,
+        mmr_fetch_k: int | None = None,
+        neighbor_expansion: int | None = None,
+        maximum_chunks_per_document: int | None = None,
+    ) -> RetrievalResult:
+        """Retrieve with safe per-call overrides that cannot alter the index specification."""
+
+        return self.query(
+            query,
+            profile=profile,
+            overrides=QueryOverrides(
+                filters=filters or {},
+                organizer=organizer,
+                final_k=final_k,
+                score_threshold=score_threshold,
+                rerank_top_n=rerank_top_n,
+                mmr_lambda=mmr_lambda,
+                mmr_fetch_k=mmr_fetch_k,
+                neighbor_expansion=neighbor_expansion,
+                maximum_chunks_per_document=maximum_chunks_per_document,
+            ),
+        )
+
+    def query(
+        self,
+        query: str,
+        *,
+        profile: str = "fast",
+        overrides: QueryOverrides | None = None,
+    ) -> RetrievalResult:
         started = time.perf_counter()
         try:
             retrieval_profile = self.config.retrieval_profiles[profile]
         except KeyError as exc:
             raise ValueError(f"unknown retrieval profile: {profile}") from exc
+        retrieval_profile = self._resolve_profile(profile, retrieval_profile, overrides)
+        filters = overrides.filters if overrides is not None else {}
         self.vector_store.ensure_index(self.index_specification)
         retrieval_limit = max(
             retrieval_profile.final_k,
@@ -193,6 +237,7 @@ class OfflineRagEngine:
             profile=profile,
             final_k=retrieval_limit,
             organizer=retrieval_profile.organizer,
+            filters=filters,
         )
         request = RetrievalRequest(query, options)
         strategy: RetrievalStrategy
@@ -269,7 +314,7 @@ class OfflineRagEngine:
                 candidates, distance=retrieval_profile.neighbor_expansion
             )
         postprocessed_at = time.perf_counter()
-        organizer_config = self.config.organizers.get(retrieval_profile.organizer)
+        organizer_config = self._organizer_config(retrieval_profile.organizer)
         budget = self._budget(organizer_config)
         organizer = self._organizer(organizer_config)
         organized = organizer.organize(query, candidates, budget)
@@ -293,6 +338,43 @@ class OfflineRagEngine:
             },
             warnings=(*warnings, *organized.warnings),
         )
+
+    def _resolve_profile(
+        self,
+        name: str,
+        profile: RetrievalProfile,
+        overrides: QueryOverrides | None,
+    ) -> RetrievalProfile:
+        if overrides is None:
+            return profile
+        data = profile.model_dump()
+        for field_name in (
+            "organizer",
+            "final_k",
+            "score_threshold",
+            "rerank_top_n",
+            "mmr_lambda",
+            "mmr_fetch_k",
+            "neighbor_expansion",
+            "maximum_chunks_per_document",
+        ):
+            value = getattr(overrides, field_name)
+            if value is not None:
+                data[field_name] = value
+        resolved = RetrievalProfile.model_validate(data)
+        if resolved.mmr_fetch_k is not None and resolved.mmr_lambda is None:
+            raise ValueError(f"query profile {name!r} configures mmr_fetch_k without mmr_lambda")
+        if resolved.mmr_fetch_k is not None and resolved.mmr_fetch_k < resolved.final_k:
+            raise ValueError(f"query profile {name!r} mmr_fetch_k must be at least final_k")
+        if resolved.reranker:
+            reranker = self.config.rerankers[resolved.reranker]
+            rerank_limit = resolved.rerank_top_n or resolved.final_k
+            if rerank_limit < resolved.final_k:
+                raise ValueError(f"query profile {name!r} rerank_top_n must be at least final_k")
+            if rerank_limit > reranker.maximum_candidates:
+                raise ValueError(f"query profile {name!r} exceeds reranker maximum_candidates")
+        self._organizer_config(resolved.organizer)
+        return resolved
 
     def _reranker_for(self, name: str, config: RerankerConfig) -> Reranker:
         cached = self._reranker_cache.get(name)
@@ -331,6 +413,23 @@ class OfflineRagEngine:
         if config.type == "debug":
             return DebugOrganizer()
         raise ValueError(f"unsupported organizer type: {config.type}")
+
+    def _organizer_config(self, name: str) -> OrganizerConfig | None:
+        configured = self.config.organizers.get(name)
+        if configured is not None:
+            return configured
+        if name == "flat":
+            return None
+        if name in {
+            "context",
+            "grouped",
+            "merge_neighbors",
+            "parent",
+            "diverse",
+            "debug",
+        }:
+            return OrganizerConfig.model_validate({"type": name})
+        raise ValueError(f"unknown organizer: {name}")
 
     @staticmethod
     def _budget(config: OrganizerConfig | None) -> ContextBudget:

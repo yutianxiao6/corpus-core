@@ -7,10 +7,31 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from offline_rag.cli import main
+from offline_rag.cli import _parse_filters, build_parser, main
 
 
 class CliTests(unittest.TestCase):
+    def test_query_override_flags_and_filter_parsing(self) -> None:
+        args = build_parser().parse_args(
+            [
+                "query",
+                "refund",
+                "--profile",
+                "balanced",
+                "--organizer",
+                "debug",
+                "--final-k",
+                "3",
+                "--score-threshold",
+                "0.4",
+                "--filter",
+                "department=support",
+            ]
+        )
+        self.assertEqual(args.organizer, "debug")
+        self.assertEqual(args.final_k, 3)
+        self.assertEqual(_parse_filters(["department=support", "acl=[1, 2]"])["acl"], (1, 2))
+
     def test_empty_invocation_prints_help(self) -> None:
         output = io.StringIO()
         with contextlib.redirect_stdout(output):

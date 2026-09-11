@@ -1120,6 +1120,8 @@ ResultOrganizer 只处理已经排好序的候选，不直接访问向量库。
 
 Profile 是默认值集合，调用参数可以覆盖非结构性参数；不能在单次查询中覆盖 embedding 规格。
 
+当前开放的逐调用覆盖项为 filters、organizer、final_k、score threshold、rerank_top_n、MMR 参数、每文档主命中上限和邻居距离。覆盖后重新执行边界及交叉约束校验，且不修改进程内冻结的 profile 对象。
+
 ## 24. 并发和运行模型
 
 ### 24.1 Python API

@@ -13,6 +13,7 @@ import yaml
 from offline_rag import __version__
 from offline_rag.config import load_config, parse_cli_overrides
 from offline_rag.config.models import RagConfig
+from offline_rag.contracts.common import JSONValue
 from offline_rag.exceptions import OfflineRagError
 
 
@@ -62,6 +63,16 @@ def build_parser() -> argparse.ArgumentParser:
     query_parser = subparsers.add_parser("query", help="run a retrieval-only debug query")
     query_parser.add_argument("query")
     query_parser.add_argument("--profile", default="fast")
+    query_parser.add_argument("--organizer")
+    query_parser.add_argument("--final-k", type=int)
+    query_parser.add_argument("--score-threshold", type=float)
+    query_parser.add_argument(
+        "--filter",
+        action="append",
+        default=[],
+        metavar="FIELD=VALUE",
+        help="apply a payload filter; may be repeated",
+    )
     query_parser.add_argument("--json", action="store_true")
 
     subparsers.add_parser("doctor", help="validate local configuration and resources")
@@ -89,10 +100,19 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "activate":
             return _activate(config, args.collection_name)
         if args.command == "query":
-            return _query(config, args.query, profile=args.profile, as_json=args.json)
+            return _query(
+                config,
+                args.query,
+                profile=args.profile,
+                organizer=args.organizer,
+                final_k=args.final_k,
+                score_threshold=args.score_threshold,
+                filters=_parse_filters(args.filter),
+                as_json=args.json,
+            )
         if args.command == "doctor":
             return _doctor(config)
-    except (OfflineRagError, OSError, ValueError) as exc:
+    except (OfflineRagError, OSError, TypeError, ValueError) as exc:
         code = exc.code if isinstance(exc, OfflineRagError) else "command_error"
         print(json.dumps({"error": code, "message": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 2
@@ -179,11 +199,28 @@ def _activate(config: RagConfig, collection_name: str) -> int:
     return 0
 
 
-def _query(config: RagConfig, query: str, *, profile: str, as_json: bool) -> int:
+def _query(
+    config: RagConfig,
+    query: str,
+    *,
+    profile: str,
+    organizer: str | None,
+    final_k: int | None,
+    score_threshold: float | None,
+    filters: Mapping[str, JSONValue],
+    as_json: bool,
+) -> int:
     from offline_rag.engine import OfflineRagEngine
 
     with OfflineRagEngine.from_config(config) as engine:
-        result = engine.query(query, profile=profile)
+        result = engine.retrieve(
+            query,
+            profile=profile,
+            organizer=organizer,
+            final_k=final_k,
+            score_threshold=score_threshold,
+            filters=filters,
+        )
     data: dict[str, object] = {
         "query": result.query,
         "index_version": result.index_version,
@@ -274,6 +311,28 @@ def _plain_json(value: object) -> object:
     if isinstance(value, tuple):
         return [_plain_json(item) for item in value]
     return value
+
+
+def _parse_filters(pairs: list[str]) -> dict[str, JSONValue]:
+    filters: dict[str, JSONValue] = {}
+    for pair in pairs:
+        if "=" not in pair:
+            raise ValueError(f"invalid filter {pair!r}; expected FIELD=VALUE")
+        key, raw = pair.split("=", 1)
+        key = key.strip()
+        if not key or key in filters:
+            raise ValueError(f"invalid or duplicate filter field: {key!r}")
+        value = yaml.safe_load(raw)
+        if isinstance(value, list):
+            if not all(
+                isinstance(item, (str, int)) and not isinstance(item, bool) for item in value
+            ):
+                raise ValueError(f"filter list for {key!r} must contain strings or integers")
+            value = tuple(value)
+        elif not isinstance(value, (str, int, bool)):
+            raise TypeError(f"filter value for {key!r} must be a scalar")
+        filters[key] = value
+    return filters
 
 
 if __name__ == "__main__":

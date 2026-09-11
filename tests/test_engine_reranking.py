@@ -154,6 +154,29 @@ class EngineRerankingTests(unittest.TestCase):
         with self.assertRaises(RerankerError):
             engine.query("query", profile="precise")
 
+    def test_per_call_overrides_do_not_mutate_profile(self) -> None:
+        engine, store = make_engine()
+        engine._reranker_cache["local"] = ReverseReranker()
+
+        result = engine.retrieve(
+            "query",
+            profile="precise",
+            filters={"department": "support"},
+            organizer="debug",
+            final_k=1,
+            score_threshold=0.5,
+        )
+
+        self.assertEqual([item.chunk.chunk_id for item in result.hits], ["c"])
+        self.assertEqual(store.requests[0].filters["department"], "support")
+        self.assertEqual(result.debug["selected_count"], 1)
+        self.assertEqual(engine.config.retrieval_profiles["precise"].final_k, 2)
+
+    def test_unknown_per_call_organizer_is_rejected(self) -> None:
+        engine, _store = make_engine()
+        with self.assertRaisesRegex(ValueError, "unknown organizer"):
+            engine.retrieve("query", profile="precise", organizer="missing")
+
 
 if __name__ == "__main__":
     unittest.main()

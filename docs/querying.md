@@ -9,6 +9,19 @@ from offline_rag.engine import OfflineRagEngine
 config = load_config("rag.yaml")
 with OfflineRagEngine.from_config(config) as engine:
     result = engine.query("离线安装需要什么环境？", profile="fast")
+
+    # 只覆盖本次调用；不会修改 profile，也不能修改 embedding/index 规格
+    precise = engine.retrieve(
+        "ERR-1042 如何处理？",
+        profile="balanced",
+        filters={"metadata.department": "support"},
+        organizer="debug",
+        final_k=8,
+        score_threshold=0.4,
+        mmr_lambda=0.65,
+        mmr_fetch_k=30,
+        neighbor_expansion=1,
+    )
 ```
 
 完全离线的 hybrid 示例见[配置说明](configuration.md#完全离线-hybrid)。返回的每个候选保留 `dense_score`、`sparse_score`、`fusion_score` 和 `origins`，便于企业评测和检索问题排查。
@@ -30,6 +43,9 @@ rag-index init ./my-rag
 rag-index preview ./documents --show-content
 rag-index --config rag.yaml build ./documents --json
 rag-index --config rag.yaml query "安装方法" --profile fast --json
+rag-index --config rag.yaml query "ERR-1042" --profile balanced \
+  --organizer debug --final-k 8 --score-threshold 0.4 \
+  --filter metadata.department=support --json
 rag-index --config rag.yaml doctor
 ```
 

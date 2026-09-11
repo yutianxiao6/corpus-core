@@ -48,6 +48,37 @@ class RetrievalOptions:
 
 
 @dataclass(frozen=True, slots=True)
+class QueryOverrides:
+    filters: Mapping[str, JSONValue] = field(default_factory=dict)
+    final_k: int | None = None
+    score_threshold: float | None = None
+    organizer: str | None = None
+    rerank_top_n: int | None = None
+    mmr_lambda: float | None = None
+    mmr_fetch_k: int | None = None
+    neighbor_expansion: int | None = None
+    maximum_chunks_per_document: int | None = None
+
+    def __post_init__(self) -> None:
+        for name in (
+            "final_k",
+            "rerank_top_n",
+            "mmr_fetch_k",
+            "maximum_chunks_per_document",
+        ):
+            value = getattr(self, name)
+            if value is not None:
+                require_positive(value, name)
+        if self.neighbor_expansion is not None and self.neighbor_expansion < 0:
+            raise ValueError("neighbor_expansion must be non-negative")
+        if self.mmr_lambda is not None and not 0 <= self.mmr_lambda <= 1:
+            raise ValueError("mmr_lambda must be between 0 and 1")
+        if self.organizer is not None:
+            require_non_empty(self.organizer, "organizer")
+        object.__setattr__(self, "filters", freeze_metadata(self.filters))
+
+
+@dataclass(frozen=True, slots=True)
 class RetrievalRequest:
     query: str
     options: RetrievalOptions = field(default_factory=RetrievalOptions)

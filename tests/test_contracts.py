@@ -19,7 +19,12 @@ from offline_rag.contracts.indexing import (
     IngestionStage,
     ItemFailure,
 )
-from offline_rag.contracts.retrieval import ContextBudget, RetrievalOptions, RetrievalRequest
+from offline_rag.contracts.retrieval import (
+    ContextBudget,
+    QueryOverrides,
+    RetrievalOptions,
+    RetrievalRequest,
+)
 
 
 def make_source() -> SourceDescriptor:
@@ -163,6 +168,12 @@ class RetrievalContractTests(unittest.TestCase):
     def test_options_freeze_filters(self) -> None:
         options = RetrievalOptions(filters={"source": ["a.md", "b.md"]})
         self.assertEqual(options.filters["source"], ("a.md", "b.md"))
+
+    def test_query_overrides_validate_safe_runtime_values(self) -> None:
+        overrides = QueryOverrides(final_k=3, mmr_lambda=0.6, filters={"acl": ["a", "b"]})
+        self.assertEqual(overrides.filters["acl"], ("a", "b"))
+        with self.assertRaises(ValueError):
+            QueryOverrides(mmr_lambda=1.1)
 
 
 if __name__ == "__main__":
