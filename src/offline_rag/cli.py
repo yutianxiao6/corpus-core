@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections.abc import Mapping
 from pathlib import Path
@@ -266,21 +267,40 @@ def _query(
 
 def _doctor(config: RagConfig) -> int:
     model_path = Path(config.embedding.model_path).expanduser()
-    vector_path = Path(config.vector_store.path or "").expanduser()
-    parent = vector_path if vector_path.exists() else vector_path.parent
     checks: list[dict[str, object]] = [
         {
             "name": "embedding_model",
             "ok": model_path.is_dir() and any(model_path.iterdir()),
             "detail": str(model_path),
         },
-        {
-            "name": "vector_store_parent",
-            "ok": parent.exists() and parent.is_dir(),
-            "detail": str(parent),
-        },
         {"name": "offline_mode", "ok": config.runtime.offline, "detail": "required"},
     ]
+    if config.vector_store.mode == "local":
+        vector_path = Path(config.vector_store.path or "").expanduser()
+        parent = vector_path if vector_path.exists() else vector_path.parent
+        checks.append(
+            {
+                "name": "vector_store_parent",
+                "ok": parent.exists() and parent.is_dir(),
+                "detail": str(parent),
+            }
+        )
+    else:
+        checks.append(
+            {
+                "name": "qdrant_server_url",
+                "ok": bool(config.vector_store.url),
+                "detail": config.vector_store.url or "missing",
+            }
+        )
+        if config.vector_store.api_key_env:
+            checks.append(
+                {
+                    "name": "qdrant_api_key_env",
+                    "ok": bool(os.environ.get(config.vector_store.api_key_env)),
+                    "detail": config.vector_store.api_key_env,
+                }
+            )
     checks.extend(
         {
             "name": f"reranker_model:{name}",

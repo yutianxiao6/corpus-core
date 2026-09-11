@@ -510,6 +510,10 @@ vector_store:
   mode: local
   path: ./data/qdrant
   url: null
+  api_key_env: null
+  prefer_grpc: false
+  timeout_seconds: 30
+  pool_size: null
   collection_alias: documents_active
   distance: cosine
   on_disk: false

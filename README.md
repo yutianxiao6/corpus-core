@@ -12,7 +12,7 @@ Offline RAG Retriever 是一个面向本地部署的通用 Python 检索组件�
 - 不按业务领域划分索引，但允许按文档结构选择解析和切块方式。
 - 没有 UI；提供索引 CLI 和 Python SDK。
 - 使用 LangChain 作为组件集成层。
-- 使用一个本地向量数据库，默认规划为 Qdrant。
+- 使用一个 Qdrant 向量数据库；单进程可用 Local，多进程企业部署使用内网 Server。
 - 检索模块不负责最终答案生成。
 - 能作为库直接接入公司的问答 AI。
 

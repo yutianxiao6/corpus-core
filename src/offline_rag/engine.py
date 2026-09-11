@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 import time
 from collections.abc import Mapping
@@ -26,7 +27,7 @@ from offline_rag.embeddings import (
     HashedLexicalSparseEmbedding,
     QwenSentenceTransformerEmbedding,
 )
-from offline_rag.exceptions import OfflineResourceMissingError, RerankerError
+from offline_rag.exceptions import ConfigurationError, OfflineResourceMissingError, RerankerError
 from offline_rag.indexing import IngestionJournal
 from offline_rag.ingestion import IngestionService, PreviewReport, build_index_specification
 from offline_rag.organizers import (
@@ -49,15 +50,13 @@ from offline_rag.retrieval import (
     limit_per_document,
     score_threshold_filter,
 )
-from offline_rag.vectorstores import QdrantLocalVectorStore
+from offline_rag.vectorstores import QdrantLocalVectorStore, QdrantServerVectorStore
 
 
 class OfflineRagEngine:
     """Library facade used by the CLI and downstream company QA applications."""
 
     def __init__(self, config: RagConfig) -> None:
-        if config.vector_store.mode != "local" or config.vector_store.path is None:
-            raise ValueError("P1 engine currently supports Qdrant Local mode only")
         self.config = config
         embedding_config = config.embedding
         self.embedding = QwenSentenceTransformerEmbedding(
@@ -81,10 +80,31 @@ class OfflineRagEngine:
             if sparse_config is not None
             else None
         )
-        self.vector_store = QdrantLocalVectorStore(
-            config.vector_store.path,
-            collection_name=config.vector_store.collection_alias,
-        )
+        vector_config = config.vector_store
+        if vector_config.mode == "local":
+            assert vector_config.path is not None
+            self.vector_store = QdrantLocalVectorStore(
+                vector_config.path,
+                collection_name=vector_config.collection_alias,
+            )
+        else:
+            assert vector_config.url is not None
+            api_key = None
+            if vector_config.api_key_env:
+                api_key = os.environ.get(vector_config.api_key_env)
+                if not api_key:
+                    raise ConfigurationError(
+                        f"Qdrant API key environment variable is missing: "
+                        f"{vector_config.api_key_env}"
+                    )
+            self.vector_store = QdrantServerVectorStore(
+                vector_config.url,
+                collection_name=vector_config.collection_alias,
+                api_key=api_key,
+                prefer_grpc=vector_config.prefer_grpc,
+                timeout_seconds=vector_config.timeout_seconds,
+                pool_size=vector_config.pool_size,
+            )
         self.index_specification = build_index_specification(
             config, self.embedding.specification, self.sparse_embedding
         )

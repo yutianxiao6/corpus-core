@@ -6,6 +6,7 @@ import asyncio
 import re
 import uuid
 from collections.abc import Mapping, Sequence
+from contextlib import AbstractContextManager
 from pathlib import Path
 from threading import RLock
 from typing import Self
@@ -39,7 +40,7 @@ class QdrantLocalVectorStore:
         self._path.mkdir(parents=True, exist_ok=True)
         self._collection_name = collection_name
         self._client = QdrantClient(path=str(self._path))
-        self._lock = RLock()
+        self._lock: AbstractContextManager[object] = RLock()
         self._owns_client = True
         self._sparse_enabled = False
 
@@ -182,7 +183,7 @@ class QdrantLocalVectorStore:
             except IndexCompatibilityError:
                 raise
             except Exception as exc:
-                raise VectorStoreError("cannot ensure Qdrant Local collection") from exc
+                raise VectorStoreError("cannot ensure Qdrant collection") from exc
 
     def upsert(self, records: Sequence[VectorRecord]) -> UpsertReport:
         if not records:
@@ -214,7 +215,7 @@ class QdrantLocalVectorStore:
             try:
                 self._client.upsert(collection_name=self._collection_name, points=points, wait=True)
             except Exception as exc:
-                raise VectorStoreError("Qdrant Local upsert failed") from exc
+                raise VectorStoreError("Qdrant upsert failed") from exc
         return UpsertReport(requested_count=len(records), completed_count=len(records))
 
     def delete(self, chunk_ids: Sequence[str]) -> DeleteReport:
@@ -236,7 +237,7 @@ class QdrantLocalVectorStore:
                     wait=True,
                 )
             except Exception as exc:
-                raise VectorStoreError("Qdrant Local delete failed") from exc
+                raise VectorStoreError("Qdrant delete failed") from exc
         return DeleteReport(requested_count=len(unique_ids), deleted_count=len(existing))
 
     def search(self, request: SearchRequest) -> Sequence[SearchHit]:
@@ -264,7 +265,7 @@ class QdrantLocalVectorStore:
                     with_vectors=False,
                 )
             except Exception as exc:
-                raise VectorStoreError("Qdrant Local search failed") from exc
+                raise VectorStoreError("Qdrant search failed") from exc
         hits: list[SearchHit] = []
         for point in response.points:
             payload = point.payload or {}
@@ -287,7 +288,7 @@ class QdrantLocalVectorStore:
                     with_vectors=False,
                 )
             except Exception as exc:
-                raise VectorStoreError("Qdrant Local payload fetch failed") from exc
+                raise VectorStoreError("Qdrant payload fetch failed") from exc
         by_id: dict[str, SearchHit] = {}
         for point in points:
             payload = point.payload or {}

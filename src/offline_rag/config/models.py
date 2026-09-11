@@ -49,10 +49,14 @@ class SparseEmbeddingConfig(StrictModel):
 
 
 class VectorStoreConfig(StrictModel):
-    provider: str = "qdrant"
+    provider: Literal["qdrant"] = "qdrant"
     mode: Literal["local", "server"] = "local"
     path: str | None = "./data/qdrant"
     url: str | None = None
+    api_key_env: str | None = None
+    prefer_grpc: bool = False
+    timeout_seconds: int = Field(default=30, gt=0)
+    pool_size: int | None = Field(default=None, gt=0)
     collection_alias: str = "documents_active"
     distance: Literal["cosine", "dot", "euclid", "manhattan"] = "cosine"
     on_disk: bool = False
@@ -63,6 +67,10 @@ class VectorStoreConfig(StrictModel):
             raise ValueError("vector_store.path is required in local mode")
         if self.mode == "server" and not self.url:
             raise ValueError("vector_store.url is required in server mode")
+        if self.mode == "server" and self.url and not self.url.startswith(("http://", "https://")):
+            raise ValueError("vector_store.url must use http:// or https://")
+        if self.api_key_env is not None and not self.api_key_env.strip():
+            raise ValueError("vector_store.api_key_env must not be blank")
         return self
 
 

@@ -137,3 +137,24 @@ enabled_plugins:
 ```
 
 配置不能引用 Python 文件路径或任意 import string。
+
+## Qdrant Server
+
+公司问答服务、多进程 worker 或导入与查询分离部署应使用 Server 模式。服务仍可部署在完全断网的内网，本项目不会调用 Qdrant Cloud inference：
+
+```yaml
+vector_store:
+  provider: qdrant
+  mode: server
+  path: null
+  url: http://qdrant.internal:6333
+  api_key_env: OFFLINE_RAG_QDRANT_API_KEY
+  prefer_grpc: true
+  timeout_seconds: 30
+  pool_size: 20
+  collection_alias: documents_active
+  distance: cosine
+  on_disk: true
+```
+
+API key 只从指定环境变量读取，不写入 YAML。变量未设置时 engine 初始化立即抛出 `ConfigurationError`。Server 和 Local 使用相同的索引指纹、named dense/sparse vectors、payload filters、staging collection 与 alias 回滚语义。

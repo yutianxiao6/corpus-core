@@ -99,6 +99,21 @@ class ConfigurationTests(unittest.TestCase):
             with self.assertRaises(ConfigurationError):
                 load_config(invalid)
 
+    def test_qdrant_server_requires_explicit_http_url(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            valid = self._write(
+                directory,
+                "vector_store:\n  mode: server\n  url: http://qdrant.internal:6333\n"
+                "  prefer_grpc: true\n  timeout_seconds: 15\n",
+            )
+            config = load_config(valid)
+            self.assertEqual(config.vector_store.mode, "server")
+            self.assertTrue(config.vector_store.prefer_grpc)
+
+            invalid = self._write(directory, "vector_store:\n  mode: server\n  url: qdrant:6333\n")
+            with self.assertRaises(ConfigurationError):
+                load_config(invalid)
+
 
 if __name__ == "__main__":
     unittest.main()
