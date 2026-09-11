@@ -51,6 +51,36 @@ retrieval_profiles:
 
 `sparse_embedding` 未配置时保持 dense-only 索引。它属于索引指纹的一部分；启用、关闭或改变参数后必须重建索引，系统不会把不兼容的旧 collection 当作可用索引。
 
+## 本地 Reranker
+
+Reranker 仅在引用它的查询 profile 执行时延迟加载，不影响文档导入。模型只能从本地目录读取：
+
+```yaml
+rerankers:
+  qwen_local:
+    provider: qwen_cross_encoder
+    model_path: ./models/Qwen3-Reranker-0.6B
+    model_revision: pinned-local
+    device: auto
+    batch_size: 8
+    max_length: 2048
+    maximum_candidates: 100
+    instruction: >-
+      Given a user question, retrieve relevant passages that answer the question.
+    score_mode: sigmoid
+    failure_policy: return_unranked
+
+retrieval_profiles:
+  precise:
+    strategy: dense
+    fetch_k: 30
+    reranker: qwen_local
+    rerank_top_n: 20
+    final_k: 6
+```
+
+`score_mode: sigmoid` 将 Qwen 输出的相关性 logit 转成 0–1 分数。`failure_policy: return_unranked` 会保留召回顺序并返回 warning；需要严格失败时改为 `fail`。`rerank_top_n` 必须不小于 `final_k`，且不能超过 `maximum_candidates`。
+
 ## 插件白名单
 
 `enabled_plugins` 只接受 `<kind>:<entry-point-name>`，例如：

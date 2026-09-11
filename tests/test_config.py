@@ -88,6 +88,17 @@ class ConfigurationTests(unittest.TestCase):
             config = load_config(valid)
             self.assertEqual(config.retrieval_profiles["balanced"].strategy, "hybrid")
 
+    def test_reranker_candidate_limits_are_validated(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            invalid = self._write(
+                directory,
+                "rerankers:\n  local:\n    model_path: ./model\n    maximum_candidates: 5\n"
+                "retrieval_profiles:\n  precise:\n    strategy: dense\n"
+                "    reranker: local\n    rerank_top_n: 4\n    final_k: 6\n",
+            )
+            with self.assertRaises(ConfigurationError):
+                load_config(invalid)
+
 
 if __name__ == "__main__":
     unittest.main()

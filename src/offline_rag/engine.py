@@ -8,7 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Self
 
-from offline_rag.config.models import OrganizerConfig, RagConfig
+from offline_rag.config.models import OrganizerConfig, RagConfig, RerankerConfig
 from offline_rag.contracts.indexing import IngestionReport
 from offline_rag.contracts.retrieval import (
     ContextBudget,
@@ -20,10 +20,12 @@ from offline_rag.embeddings import (
     HashedLexicalSparseEmbedding,
     QwenSentenceTransformerEmbedding,
 )
+from offline_rag.exceptions import OfflineResourceMissingError, RerankerError
 from offline_rag.indexing import IngestionJournal
 from offline_rag.ingestion import IngestionService, PreviewReport, build_index_specification
 from offline_rag.organizers import ContextOrganizer, FlatOrganizer
-from offline_rag.ports import RetrievalStrategy
+from offline_rag.ports import Reranker, RetrievalStrategy
+from offline_rag.rerankers import QwenCrossEncoderReranker
 from offline_rag.retrieval import (
     DenseSimilarityStrategy,
     HybridRetrievalStrategy,
@@ -69,6 +71,7 @@ class OfflineRagEngine:
             config, self.embedding.specification, self.sparse_embedding
         )
         self.journal = IngestionJournal(Path(config.runtime.work_dir) / "ingestion.sqlite3")
+        self._reranker_cache: dict[str, Reranker] = {}
         self.journal.recover_interrupted_jobs()
         self.ingestion = IngestionService(
             config,
@@ -157,9 +160,17 @@ class OfflineRagEngine:
         except KeyError as exc:
             raise ValueError(f"unknown retrieval profile: {profile}") from exc
         self.vector_store.ensure_index(self.index_specification)
+        retrieval_limit = (
+            max(
+                retrieval_profile.final_k,
+                retrieval_profile.rerank_top_n or retrieval_profile.final_k,
+            )
+            if retrieval_profile.reranker
+            else retrieval_profile.final_k
+        )
         options = RetrievalOptions(
             profile=profile,
-            final_k=retrieval_profile.final_k,
+            final_k=retrieval_limit,
             organizer=retrieval_profile.organizer,
         )
         request = RetrievalRequest(query, options)
@@ -205,6 +216,23 @@ class OfflineRagEngine:
             )
         candidates = strategy.retrieve(request)
         retrieved_at = time.perf_counter()
+        warnings: list[str] = []
+        if retrieval_profile.reranker:
+            reranker_config = self.config.rerankers[retrieval_profile.reranker]
+            try:
+                candidates = self._reranker_for(retrieval_profile.reranker, reranker_config).rerank(
+                    query,
+                    candidates,
+                    top_n=retrieval_profile.rerank_top_n or retrieval_profile.final_k,
+                )
+            except (OfflineResourceMissingError, RerankerError):
+                if reranker_config.failure_policy == "fail":
+                    raise
+                warnings.append(
+                    f"reranker {retrieval_profile.reranker!r} failed; returned recall order"
+                )
+        candidates = tuple(candidates[: retrieval_profile.final_k])
+        reranked_at = time.perf_counter()
         organizer_config = self.config.organizers.get(retrieval_profile.organizer)
         budget = self._budget(organizer_config)
         organizer = (
@@ -224,11 +252,31 @@ class OfflineRagEngine:
             embedding_fingerprint=self.embedding.specification.fingerprint(),
             timings_ms={
                 "retrieve": (retrieved_at - started) * 1000,
-                "organize": (finished - retrieved_at) * 1000,
+                "rerank": (reranked_at - retrieved_at) * 1000,
+                "organize": (finished - reranked_at) * 1000,
                 "total": (finished - started) * 1000,
             },
-            warnings=organized.warnings,
+            warnings=(*warnings, *organized.warnings),
         )
+
+    def _reranker_for(self, name: str, config: RerankerConfig) -> Reranker:
+        cached = self._reranker_cache.get(name)
+        if cached is not None:
+            return cached
+        if config.provider != QwenCrossEncoderReranker.provider_name:
+            raise ValueError(f"unsupported reranker provider: {config.provider}")
+        reranker = QwenCrossEncoderReranker(
+            config.model_path,
+            revision=config.model_revision,
+            device=config.device,
+            batch_size=config.batch_size,
+            max_length=config.max_length,
+            maximum_candidates=config.maximum_candidates,
+            instruction=config.instruction,
+            score_mode=config.score_mode,
+        )
+        self._reranker_cache[name] = reranker
+        return reranker
 
     @staticmethod
     def _budget(config: OrganizerConfig | None) -> ContextBudget:

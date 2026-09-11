@@ -13,6 +13,8 @@ with OfflineRagEngine.from_config(config) as engine:
 
 完全离线的 hybrid 示例见[配置说明](configuration.md#完全离线-hybrid)。返回的每个候选保留 `dense_score`、`sparse_score`、`fusion_score` 和 `origins`，便于企业评测和检索问题排查。
 
+配置 reranker 后，查询会按 `rerank_top_n` 扩大召回池，使用本地 Qwen3 CrossEncoder 重新打分，最后才裁剪到 `final_k`。`rerank_score` 保留在结果中；模型失败时按配置选择降级到原召回顺序并附 warning，或让查询失败。
+
 `RetrievalResult` 同时返回排序后的 chunk、阶段耗时、索引版本和 embedding 指纹。使用 Context organizer 时还会返回可直接交给上层 LLM 的 context 与结构化 citations。
 
 Qdrant Local 只适合单进程 CLI、预览和开发。同一个进程复用同一 `QdrantLocalVectorStore`；公司问答服务的多进程并发接入应使用后续的 Qdrant Server 适配器。

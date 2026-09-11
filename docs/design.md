@@ -607,10 +607,17 @@ retrieval_profiles:
 
 rerankers:
   qwen_local:
-    provider: qwen
+    provider: qwen_cross_encoder
     model_path: ./models/Qwen3-Reranker-0.6B
+    model_revision: pinned-local
     device: auto
     batch_size: 8
+    max_length: 2048
+    maximum_candidates: 100
+    instruction: >-
+      Given a user question, retrieve relevant passages that answer the question.
+    score_mode: sigmoid
+    failure_policy: return_unranked
 
 organizers:
   context:

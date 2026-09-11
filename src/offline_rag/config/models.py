@@ -212,10 +212,16 @@ class RetrievalProfile(StrictModel):
 
 
 class RerankerConfig(StrictModel):
-    provider: str
+    provider: Literal["qwen_cross_encoder"] = "qwen_cross_encoder"
     model_path: str
+    model_revision: str | None = None
     device: str = "auto"
     batch_size: int = Field(default=8, gt=0)
+    max_length: int = Field(default=2048, gt=0)
+    maximum_candidates: int = Field(default=100, gt=0)
+    instruction: str = "Given a user question, retrieve relevant passages that answer the question."
+    score_mode: Literal["sigmoid", "raw"] = "sigmoid"
+    failure_policy: Literal["return_unranked", "fail"] = "return_unranked"
 
 
 class OrganizerConfig(StrictModel):
@@ -285,6 +291,17 @@ class RagConfig(StrictModel):
                     f"retrieval profile {name!r} references missing reranker "
                     f"{retrieval_profile.reranker!r}"
                 )
+            if retrieval_profile.reranker:
+                reranker = self.rerankers[retrieval_profile.reranker]
+                rerank_top_n = retrieval_profile.rerank_top_n or retrieval_profile.final_k
+                if rerank_top_n < retrieval_profile.final_k:
+                    raise ValueError(
+                        f"retrieval profile {name!r} rerank_top_n must be at least final_k"
+                    )
+                if rerank_top_n > reranker.maximum_candidates:
+                    raise ValueError(
+                        f"retrieval profile {name!r} exceeds reranker maximum_candidates"
+                    )
             if (
                 retrieval_profile.organizer != "flat"
                 and retrieval_profile.organizer not in self.organizers

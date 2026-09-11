@@ -194,6 +194,7 @@ def _query(config: RagConfig, query: str, *, profile: str, as_json: bool) -> int
                 "dense_score": candidate.dense_score,
                 "sparse_score": candidate.sparse_score,
                 "fusion_score": candidate.fusion_score,
+                "rerank_score": candidate.rerank_score,
                 "origins": candidate.origins,
                 "source": candidate.chunk.source_uri,
                 "content": candidate.chunk.content,
@@ -235,6 +236,14 @@ def _doctor(config: RagConfig) -> int:
         },
         {"name": "offline_mode", "ok": config.runtime.offline, "detail": "required"},
     ]
+    checks.extend(
+        {
+            "name": f"reranker_model:{name}",
+            "ok": (path := Path(reranker.model_path).expanduser()).is_dir() and any(path.iterdir()),
+            "detail": str(path),
+        }
+        for name, reranker in config.rerankers.items()
+    )
     ok = all(bool(item["ok"]) for item in checks)
     _print_data({"ok": ok, "checks": checks}, as_json=True)
     return 0 if ok else 1

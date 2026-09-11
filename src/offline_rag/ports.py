@@ -90,6 +90,24 @@ class RetrievalStrategy(Protocol):
     async def aretrieve(self, request: RetrievalRequest) -> Sequence[RetrievalCandidate]: ...
 
 
+class Reranker(Protocol):
+    def rerank(
+        self,
+        query: str,
+        candidates: Sequence[RetrievalCandidate],
+        *,
+        top_n: int | None = None,
+    ) -> Sequence[RetrievalCandidate]: ...
+
+    async def arerank(
+        self,
+        query: str,
+        candidates: Sequence[RetrievalCandidate],
+        *,
+        top_n: int | None = None,
+    ) -> Sequence[RetrievalCandidate]: ...
+
+
 class ResultOrganizer(Protocol):
     def organize(
         self,
