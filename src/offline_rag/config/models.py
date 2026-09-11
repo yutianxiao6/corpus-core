@@ -229,7 +229,7 @@ class RerankerConfig(StrictModel):
 
 
 class OrganizerConfig(StrictModel):
-    type: Literal["flat", "context", "grouped", "parent", "diverse", "debug"]
+    type: Literal["flat", "context", "grouped", "merge_neighbors", "parent", "diverse", "debug"]
     max_context_tokens: int = Field(default=6000, gt=0)
     merge_neighbors: bool = False
     maximum_chunks_per_document: int | None = Field(default=None, gt=0)

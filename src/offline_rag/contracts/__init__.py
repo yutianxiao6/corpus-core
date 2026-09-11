@@ -20,6 +20,7 @@ from offline_rag.contracts.indexing import (
 from offline_rag.contracts.retrieval import (
     Citation,
     OrganizedResult,
+    ResultGroup,
     RetrievalCandidate,
     RetrievalResult,
     SearchHit,
@@ -40,6 +41,7 @@ __all__ = [
     "LoadedContent",
     "OrganizedResult",
     "ParsedDocument",
+    "ResultGroup",
     "RetrievalCandidate",
     "RetrievalResult",
     "SearchHit",

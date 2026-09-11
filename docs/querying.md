@@ -17,6 +17,8 @@ with OfflineRagEngine.from_config(config) as engine:
 
 查询 profile 还支持 `score_threshold`、`mmr_lambda`/`mmr_fetch_k`、`maximum_chunks_per_document` 和 `neighbor_expansion`。MMR 会对候选正文进行本地 dense 编码，换取更少重复的证据；邻居通过索引中的稳定相邻 ID 按批取回，不执行第二次相似度搜索。
 
+组织阶段可返回独立切片、按文档分组、合并邻居、parent 正文、轮询多样性或 debug 明细。`RetrievalResult.groups` 保留结构化分组；`debug` 保留分数和预算决策；合并及 parent citation 始终指向原始证据 chunk，不指向临时合成 ID。
+
 `RetrievalResult` 同时返回排序后的 chunk、阶段耗时、索引版本和 embedding 指纹。使用 Context organizer 时还会返回可直接交给上层 LLM 的 context 与结构化 citations。
 
 Qdrant Local 只适合单进程 CLI、预览和开发。同一个进程复用同一 `QdrantLocalVectorStore`；公司问答服务的多进程并发接入应使用后续的 Qdrant Server 适配器。

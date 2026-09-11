@@ -140,16 +140,30 @@ class Citation:
 
 
 @dataclass(frozen=True, slots=True)
+class ResultGroup:
+    group_id: str
+    hits: Sequence[RetrievalCandidate]
+
+    def __post_init__(self) -> None:
+        require_non_empty(self.group_id, "group_id")
+        object.__setattr__(self, "hits", tuple(self.hits))
+
+
+@dataclass(frozen=True, slots=True)
 class OrganizedResult:
     hits: Sequence[RetrievalCandidate]
     context: str | None = None
     citations: Sequence[Citation] = ()
     warnings: Sequence[str] = ()
+    groups: Sequence[ResultGroup] = ()
+    debug: Mapping[str, JSONValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "hits", tuple(self.hits))
         object.__setattr__(self, "citations", tuple(self.citations))
         object.__setattr__(self, "warnings", tuple(self.warnings))
+        object.__setattr__(self, "groups", tuple(self.groups))
+        object.__setattr__(self, "debug", freeze_metadata(self.debug))
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,6 +178,8 @@ class RetrievalResult:
     citations: Sequence[Citation] = ()
     timings_ms: Mapping[str, float] = field(default_factory=dict)
     warnings: Sequence[str] = ()
+    groups: Sequence[ResultGroup] = ()
+    debug: Mapping[str, JSONValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         require_non_empty(self.query, "query")
@@ -177,3 +193,5 @@ class RetrievalResult:
         object.__setattr__(self, "citations", tuple(self.citations))
         object.__setattr__(self, "timings_ms", freeze_metadata(self.timings_ms))
         object.__setattr__(self, "warnings", tuple(self.warnings))
+        object.__setattr__(self, "groups", tuple(self.groups))
+        object.__setattr__(self, "debug", freeze_metadata(self.debug))

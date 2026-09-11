@@ -23,8 +23,16 @@ from offline_rag.embeddings import (
 from offline_rag.exceptions import OfflineResourceMissingError, RerankerError
 from offline_rag.indexing import IngestionJournal
 from offline_rag.ingestion import IngestionService, PreviewReport, build_index_specification
-from offline_rag.organizers import ContextOrganizer, FlatOrganizer
-from offline_rag.ports import Reranker, RetrievalStrategy
+from offline_rag.organizers import (
+    ContextOrganizer,
+    DebugOrganizer,
+    DiverseOrganizer,
+    FlatOrganizer,
+    GroupByDocumentOrganizer,
+    MergeNeighborsOrganizer,
+    ParentOrganizer,
+)
+from offline_rag.ports import Reranker, ResultOrganizer, RetrievalStrategy
 from offline_rag.rerankers import QwenCrossEncoderReranker
 from offline_rag.retrieval import (
     DenseSimilarityStrategy,
@@ -263,11 +271,7 @@ class OfflineRagEngine:
         postprocessed_at = time.perf_counter()
         organizer_config = self.config.organizers.get(retrieval_profile.organizer)
         budget = self._budget(organizer_config)
-        organizer = (
-            ContextOrganizer()
-            if organizer_config is not None and organizer_config.type == "context"
-            else FlatOrganizer()
-        )
+        organizer = self._organizer(organizer_config)
         organized = organizer.organize(query, candidates, budget)
         finished = time.perf_counter()
         return RetrievalResult(
@@ -276,6 +280,8 @@ class OfflineRagEngine:
             hits=organized.hits,
             context=organized.context,
             citations=organized.citations,
+            groups=organized.groups,
+            debug=organized.debug,
             index_version=self.index_specification.fingerprint()[:16],
             embedding_fingerprint=self.embedding.specification.fingerprint(),
             timings_ms={
@@ -306,6 +312,25 @@ class OfflineRagEngine:
         )
         self._reranker_cache[name] = reranker
         return reranker
+
+    def _organizer(self, config: OrganizerConfig | None) -> ResultOrganizer:
+        if config is None or config.type == "flat":
+            return FlatOrganizer()
+        if config.type == "context":
+            if config.merge_neighbors:
+                return MergeNeighborsOrganizer(token_counter=self.embedding.count_tokens)
+            return ContextOrganizer(token_counter=self.embedding.count_tokens)
+        if config.type == "grouped":
+            return GroupByDocumentOrganizer()
+        if config.type == "merge_neighbors":
+            return MergeNeighborsOrganizer(token_counter=self.embedding.count_tokens)
+        if config.type == "parent":
+            return ParentOrganizer(token_counter=self.embedding.count_tokens)
+        if config.type == "diverse":
+            return DiverseOrganizer()
+        if config.type == "debug":
+            return DebugOrganizer()
+        raise ValueError(f"unsupported organizer type: {config.type}")
 
     @staticmethod
     def _budget(config: OrganizerConfig | None) -> ContextBudget:

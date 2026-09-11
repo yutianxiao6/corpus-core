@@ -158,7 +158,7 @@ def _index(
 
     with OfflineRagEngine.from_config(config) as engine:
         report = engine.sync(*inputs) if operation == "sync" else engine.rebuild(*inputs)
-    data = {
+    data: dict[str, object] = {
         "job_id": report.job_id,
         "index_version": report.index_version,
         "indexed_count": report.indexed_count,
@@ -184,7 +184,7 @@ def _query(config: RagConfig, query: str, *, profile: str, as_json: bool) -> int
 
     with OfflineRagEngine.from_config(config) as engine:
         result = engine.query(query, profile=profile)
-    data = {
+    data: dict[str, object] = {
         "query": result.query,
         "index_version": result.index_version,
         "hits": [
@@ -212,6 +212,14 @@ def _query(config: RagConfig, query: str, *, profile: str, as_json: bool) -> int
             }
             for citation in result.citations
         ],
+        "groups": [
+            {
+                "group_id": group.group_id,
+                "chunk_ids": [candidate.chunk.chunk_id for candidate in group.hits],
+            }
+            for group in result.groups
+        ],
+        "debug": _plain_json(result.debug),
         "timings_ms": dict(result.timings_ms),
         "warnings": list(result.warnings),
     }
@@ -258,6 +266,14 @@ def _print_data(data: Mapping[str, object], *, as_json: bool) -> None:
             print(f"{key}: {json.dumps(value, ensure_ascii=False)}")
         else:
             print(f"{key}: {value}")
+
+
+def _plain_json(value: object) -> object:
+    if isinstance(value, Mapping):
+        return {str(key): _plain_json(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_plain_json(item) for item in value]
+    return value
 
 
 if __name__ == "__main__":

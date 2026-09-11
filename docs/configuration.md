@@ -100,6 +100,31 @@ retrieval_profiles:
 
 处理顺序是 rerank → threshold → 每文档主命中限制 → MMR → `final_k` → neighbor expansion。邻居用于补齐上下文，保留 `origins: [neighbor]`，但没有伪造的检索分数和排名。`score_threshold` 和 `mmr_lambda` 与模型、语料强相关，部署方必须用自己的固定评测集校准。
 
+## 结果组织器
+
+`organizers` 支持以下类型：
+
+- `flat`：保持独立切片。
+- `context`：生成带稳定引用编号的 LLM 上下文；`merge_neighbors: true` 时先合并相邻切片。
+- `grouped`：按文档分组，文档组按最佳命中顺序，组内按页码和 chunk index 排列。
+- `merge_neighbors`：只合并 source、document 及双向相邻 ID 均一致的连续切片，citation 保留所有原 chunk ID。
+- `parent`：将多个 child 命中折叠为完整 parent 正文，citation 保留触发它的 child ID。
+- `diverse`：按文档轮询输出，避免同一文档的结果连续占满预算。
+- `debug`：输出候选的各阶段分数、来源、是否入选及 `character_budget`、`token_budget`、`document_limit` 等决策原因。
+
+```yaml
+organizers:
+  cited_context:
+    type: context
+    max_context_tokens: 6000
+    merge_neighbors: true
+    maximum_chunks_per_document: 3
+    citation_style: numbered
+  diagnostics:
+    type: debug
+    max_context_tokens: 20000
+```
+
 ## 插件白名单
 
 `enabled_plugins` 只接受 `<kind>:<entry-point-name>`，例如：
