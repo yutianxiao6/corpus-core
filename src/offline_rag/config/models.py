@@ -158,6 +158,20 @@ class ParagraphPackingChunkProfile(StrictModel):
 class SyntaxChunkProfile(StrictModel):
     type: Literal["syntax"]
     fallback_profile: str = "default"
+    max_chunk_size: int = Field(default=1600, gt=0)
+
+
+class SemanticChunkProfile(StrictModel):
+    type: Literal["semantic"]
+    similarity_threshold: float = Field(default=0.45, ge=-1, le=1)
+    minimum_chunk_size: int = Field(default=200, ge=0)
+    maximum_chunk_size: int = Field(default=1200, gt=0)
+
+    @model_validator(mode="after")
+    def validate_sizes(self) -> SemanticChunkProfile:
+        if self.minimum_chunk_size > self.maximum_chunk_size:
+            raise ValueError("minimum_chunk_size must not exceed maximum_chunk_size")
+        return self
 
 
 class ParentChildChunkProfile(StrictModel):
@@ -182,6 +196,7 @@ ChunkProfile = Annotated[
     | ParagraphPackingChunkProfile
     | TableRowsChunkProfile
     | SyntaxChunkProfile
+    | SemanticChunkProfile
     | ParentChildChunkProfile,
     Field(discriminator="type"),
 ]
@@ -260,6 +275,7 @@ def _default_chunk_profiles() -> dict[str, ChunkProfile]:
     return {
         "default": RecursiveChunkProfile(type="recursive"),
         "markdown_heading": HeadingRecursiveChunkProfile(type="heading_recursive"),
+        "source_code": SyntaxChunkProfile(type="syntax"),
     }
 
 
@@ -299,6 +315,12 @@ class RagConfig(StrictModel):
                     f"chunk profile {name!r} references missing fallback "
                     f"{chunk_profile.fallback_profile!r}"
                 )
+            if isinstance(chunk_profile, SyntaxChunkProfile):
+                fallback = self.chunk_profiles[chunk_profile.fallback_profile]
+                if isinstance(fallback, SyntaxChunkProfile):
+                    raise ValueError(  # noqa: TRY004 - Pydantic validator contract
+                        f"chunk profile {name!r} must not use a syntax fallback profile"
+                    )
         for position, rule in enumerate(self.routing):
             if rule.use not in self.chunk_profiles:
                 raise ValueError(

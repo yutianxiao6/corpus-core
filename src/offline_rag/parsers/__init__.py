@@ -1,5 +1,6 @@
 """Built-in structure-aware document parsers."""
 
+from offline_rag.parsers.code import CODE_EXTENSIONS, CODE_LANGUAGES, CodeParser
 from offline_rag.parsers.docx import DocxParser
 from offline_rag.parsers.html import HtmlParser
 from offline_rag.parsers.markdown import MarkdownParser
@@ -11,6 +12,9 @@ from offline_rag.parsers.text import TextParser
 from offline_rag.parsers.xlsx import XlsxParser
 
 __all__ = [
+    "CODE_EXTENSIONS",
+    "CODE_LANGUAGES",
+    "CodeParser",
     "DocxParser",
     "HtmlParser",
     "MarkdownParser",

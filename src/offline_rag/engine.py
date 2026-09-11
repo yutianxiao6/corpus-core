@@ -143,9 +143,11 @@ class OfflineRagEngine:
         return cls(config)
 
     def preview(self, *inputs: str | Path) -> PreviewReport:
-        return IngestionService(self.config, token_counter=self.embedding.count_tokens).preview(
-            inputs
-        )
+        return IngestionService(
+            self.config,
+            embedding=self.embedding,
+            token_counter=self.embedding.count_tokens,
+        ).preview(inputs)
 
     def build(self, *inputs: str | Path) -> IngestionReport:
         return self.rebuild(*inputs)

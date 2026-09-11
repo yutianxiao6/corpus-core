@@ -183,9 +183,34 @@ def _preview(
     show_content: bool,
     as_json: bool,
 ) -> int:
+    from offline_rag.config.models import RecursiveChunkProfile, SemanticChunkProfile
+    from offline_rag.embeddings import QwenSentenceTransformerEmbedding
     from offline_rag.ingestion import IngestionService
 
-    report = IngestionService(config).preview(inputs)
+    needs_embedding = any(
+        isinstance(profile, SemanticChunkProfile)
+        or isinstance(profile, RecursiveChunkProfile)
+        and profile.length_unit == "token"
+        for profile in config.chunk_profiles.values()
+    )
+    embedding = None
+    if needs_embedding:
+        settings = config.embedding
+        embedding = QwenSentenceTransformerEmbedding(
+            settings.model_path,
+            revision=settings.model_revision or "pinned-local",
+            dimension=settings.dimension,
+            normalize=settings.normalize,
+            batch_size=settings.batch_size,
+            max_length=settings.max_length,
+            query_instruction=settings.query_instruction,
+            device=settings.device,
+        )
+    report = IngestionService(
+        config,
+        embedding=embedding,
+        token_counter=embedding.count_tokens if embedding is not None else None,
+    ).preview(inputs)
     data: dict[str, object] = {
         "source_count": report.source_count,
         "successful_count": len(report.items),

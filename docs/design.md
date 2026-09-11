@@ -562,7 +562,14 @@ chunk_profiles:
 
   source_code:
     type: syntax
+    max_chunk_size: 1600
     fallback_profile: default
+
+  semantic_manual:
+    type: semantic
+    similarity_threshold: 0.45
+    minimum_chunk_size: 200
+    maximum_chunk_size: 1200
 
   parent_child:
     type: parent_child

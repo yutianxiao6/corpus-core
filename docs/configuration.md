@@ -22,6 +22,39 @@ Query profile 是经过启动期校验的默认参数集合。Python `engine.ret
 
 完整字段示例见 [设计文档](design.md#112-完整配置示例)。
 
+## 代码与实验性语义切块
+
+代码文件默认路由到内置 `source_code` profile。Python 使用 AST 顶层符号边界；其他语言和语法不完整的 Python 使用指定 profile 回退：
+
+```yaml
+chunk_profiles:
+  default:
+    type: recursive
+    chunk_size: 800
+    chunk_overlap: 120
+  source_code:
+    type: syntax
+    max_chunk_size: 1600
+    fallback_profile: default
+```
+
+语义切块是显式启用的实验能力。它使用同一个本地 document embedding 模型比较相邻结构块，低于阈值或超过最大长度时断开；切块参数和 embedding 模型都会进入索引指纹：
+
+```yaml
+chunk_profiles:
+  semantic_manual:
+    type: semantic
+    similarity_threshold: 0.45
+    minimum_chunk_size: 200
+    maximum_chunk_size: 1200
+routing:
+  - match:
+      path_patterns: ["manuals/**"]
+    use: semantic_manual
+```
+
+语义切块会额外执行一轮 document embedding，导入耗时和显存占用高于递归切块。阈值必须通过目标公司的固定评测集校准；模型缺失、向量维度异常或推理失败会中止该文档，不会静默改用另一种边界。
+
 ## 查询并发与模型微批
 
 异步查询通过两个独立的有界队列控制本地 embedding 和 reranker 模型。短时间内到达的 embedding query 会合并为一次模型 `encode`；多个 rerank 请求会先展平 query-document 对，执行一次 `predict`，再按输入请求拆分结果：

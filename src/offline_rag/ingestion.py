@@ -19,6 +19,8 @@ from offline_rag.chunkers import (
     ParagraphPackingChunker,
     ParentChildChunker,
     RecursiveChunker,
+    SemanticChunker,
+    SyntaxChunker,
     TableRowChunker,
 )
 from offline_rag.config.models import (
@@ -28,9 +30,11 @@ from offline_rag.config.models import (
     ParentChildChunkProfile,
     RagConfig,
     RecursiveChunkProfile,
+    SemanticChunkProfile,
+    SyntaxChunkProfile,
     TableRowsChunkProfile,
 )
-from offline_rag.contracts.chunks import Chunk
+from offline_rag.contracts.chunks import Chunk, ChunkDraft
 from offline_rag.contracts.common import JSONValue
 from offline_rag.contracts.documents import ParsedDocument, SourceDescriptor
 from offline_rag.contracts.indexing import (
@@ -53,6 +57,8 @@ from offline_rag.loaders import (
     TextLoader,
 )
 from offline_rag.parsers import (
+    CODE_EXTENSIONS,
+    CodeParser,
     DocxParser,
     HtmlParser,
     MarkdownParser,
@@ -87,7 +93,7 @@ SUPPORTED_EXTENSIONS = (
     ".xlsm",
     ".pptx",
     ".pptm",
-)
+) + CODE_EXTENSIONS
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +115,14 @@ class PreviewReport:
     @property
     def chunk_count(self) -> int:
         return sum(len(item.chunks) for item in self.items)
+
+
+@dataclass(frozen=True, slots=True)
+class _ConfiguredChunker:
+    callback: Callable[[ParsedDocument], Sequence[ChunkDraft]]
+
+    def split(self, document: ParsedDocument) -> Sequence[ChunkDraft]:
+        return self.callback(document)
 
 
 class IngestionService:
@@ -138,6 +152,7 @@ class IngestionService:
             extensions=(".html", ".htm", ".csv", ".json", ".jsonl"),
             media_types=("text/html", "text/csv", "application/json", "application/x-ndjson"),
         )
+        self._code_loader = TextLoader(extensions=CODE_EXTENSIONS)
         self._text_parser = TextParser()
         self._markdown_parser = MarkdownParser()
         self._pdf_parser = PdfParser()
@@ -146,6 +161,7 @@ class IngestionService:
         self._xlsx_parser = XlsxParser()
         self._pptx_parser = PptxParser()
         self._html_parser = HtmlParser()
+        self._code_parser = CodeParser()
         self._finalizer = ChunkFinalizer()
 
     def preview(
@@ -447,6 +463,8 @@ class IngestionService:
             return StructuredTextParser(suffix.removeprefix(".")).parse(
                 self._structured_text_loader.load(source)
             )
+        if suffix in CODE_EXTENSIONS:
+            return self._code_parser.parse(self._code_loader.load(source))
         raise UnsupportedDocumentError(
             "no built-in parser supports this source",
             details={"source_id": source.source_id, "extension": suffix},
@@ -454,6 +472,22 @@ class IngestionService:
 
     def _chunk(self, document: ParsedDocument) -> tuple[Chunk, ...]:
         name = self._profile_for(document.source)
+        drafts = self._split_with_profile(document, name, ())
+        profile = self._config.chunk_profiles[name]
+        if getattr(profile, "include_heading_in_embedding", True):
+            drafts = HeadingContextInjector().process(drafts)
+        drafts = ChunkDeduplicator().process(drafts)
+        return self._finalizer.finalize(drafts)
+
+    def _split_with_profile(
+        self,
+        document: ParsedDocument,
+        name: str,
+        resolving: tuple[str, ...],
+    ) -> Sequence[ChunkDraft]:
+        if name in resolving:
+            chain = " -> ".join((*resolving, name))
+            raise ConfigurationError(f"cyclic chunk profile fallback: {chain}")
         profile = self._config.chunk_profiles[name]
         if isinstance(profile, RecursiveChunkProfile):
             if profile.length_unit == "token" and self._token_counter is None:
@@ -500,14 +534,27 @@ class IngestionService:
                 child_size=profile.child_size,
                 child_overlap=profile.child_overlap,
             ).split(document)
-        else:
-            raise UnsupportedDocumentError(
-                f"chunk profile type is not implemented in P1: {profile.type}"
+        elif isinstance(profile, SyntaxChunkProfile):
+            fallback = _ConfiguredChunker(
+                lambda value: self._split_with_profile(
+                    value, profile.fallback_profile, (*resolving, name)
+                )
             )
-        if getattr(profile, "include_heading_in_embedding", True):
-            drafts = HeadingContextInjector().process(drafts)
-        drafts = ChunkDeduplicator().process(drafts)
-        return self._finalizer.finalize(drafts)
+            drafts = SyntaxChunker(fallback, max_chunk_size=profile.max_chunk_size).split(document)
+        elif isinstance(profile, SemanticChunkProfile):
+            if self._embedding is None:
+                raise ConfigurationError(
+                    "semantic chunking requires the configured local embedding provider"
+                )
+            drafts = SemanticChunker(
+                self._embedding.embed_documents,
+                similarity_threshold=profile.similarity_threshold,
+                minimum_chunk_size=profile.minimum_chunk_size,
+                maximum_chunk_size=profile.maximum_chunk_size,
+            ).split(document)
+        else:
+            raise UnsupportedDocumentError(f"chunk profile type is not implemented: {profile.type}")
+        return drafts
 
     def _profile_for(self, source: SourceDescriptor) -> str:
         relative_path = source.relative_path or Path(source.uri).name
@@ -537,6 +584,8 @@ class IngestionService:
                 return rule.use
         if extension in (".md", ".markdown") and "markdown_heading" in self._config.chunk_profiles:
             return "markdown_heading"
+        if extension in CODE_EXTENSIONS and "source_code" in self._config.chunk_profiles:
+            return "source_code"
         return "default"
 
     @staticmethod
@@ -571,6 +620,7 @@ def build_index_specification(
             "pptx": PptxParser.version,
             "html": HtmlParser.version,
             "structured_text": StructuredTextParser.version,
+            "code": CodeParser.version,
         },
         chunking_configuration=chunking,
         sparse_embedding=(sparse_embedding.specification if sparse_embedding is not None else None),

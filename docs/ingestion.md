@@ -25,4 +25,6 @@ sources = list(provider.discover())
 
 Office 与 OCR 能力均保持离线：`tables` 提供 `.xlsx/.xlsm`，`office` 提供 `.pptx/.pptm`，`ocr` 使用本地 PyMuPDF 渲染页面和 Tesseract 识别。宏不会执行，Excel 以 `data_only=True` 读取缓存值。
 
+源代码支持 `.py/.js/.jsx/.ts/.tsx/.java/.go/.rs/.c/.cc/.cpp/.h/.hpp/.cs/.rb/.php/.swift/.kt/.kts/.scala/.sql/.sh`。Python 默认使用标准库 AST，尽量保持顶层函数、异步函数、装饰器和类的边界；语法错误或其他语言会按 `fallback_profile` 确定性回退，并在 chunk metadata 中记录原因。解析器只读取文本，不执行代码。
+
 高级切块提供 Page Aware、Paragraph Packing、Table Row 和 Parent Child。Parent Child 的每个 child 都保存稳定 `parent_id` 与 parent 原文，后续 organizer 可以合并多个 child 命中而不依赖额外数据库。精确内容去重默认启用；近似去重必须显式设置阈值。
