@@ -29,7 +29,8 @@ documents = [
 ]
 sparse = ["fastembed>=0.7"]
 tables = ["openpyxl>=3.1"]
-ocr = ["pillow>=10", "pytesseract>=0.3"]
+office = ["python-pptx>=1.0"]
+ocr = ["pillow>=10", "pytesseract>=0.3", "pymupdf>=1.24"]
 
 [dependency-groups]
 dev = [
@@ -76,4 +77,8 @@ follow_imports = "skip"
 
 [[tool.mypy.overrides]]
 module = ["bs4", "bs4.*", "docx", "docx.*", "pypdf", "pypdf.*"]
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+module = ["openpyxl", "openpyxl.*", "pptx", "pptx.*", "fitz", "pytesseract", "PIL", "PIL.*"]
 follow_imports = "skip"

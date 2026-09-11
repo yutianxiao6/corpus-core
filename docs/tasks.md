@@ -111,7 +111,7 @@
 - [x] `P3-005` 实现完整评测工具和回归门槛。
 - [x] `P3-006` 实现索引备份、恢复与恢复验证。
 - [x] `P3-007` 生成离线 wheelhouse、模型 bundle 和 checksum。
-- [ ] `P3-008` 实现 OCR、扫描 PDF、Excel 和 PowerPoint extras。
+- [x] `P3-008` 实现 OCR、扫描 PDF、Excel 和 PowerPoint extras。
 - [ ] `P3-009` 实现代码 AST 和实验性 Semantic chunker。
 - [ ] `P3-010` 提供可选 HTTP 查询服务参考适配器。
 

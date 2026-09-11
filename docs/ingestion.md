@@ -21,6 +21,8 @@ sources = list(provider.discover())
 
 `TextLoader` 支持 UTF-8、UTF BOM 和本地编码检测；loader 会重新校验发现阶段的内容摘要。`MarkdownLoader` 与 `MarkdownParser` 保留标题、段落、列表和代码围栏结构。基础 normalizer 统一 NFC Unicode、换行和非法控制字符，代码与表格的空白布局不做压缩。
 
-当前内置格式还包括：文本型 PDF（保留一基页码）、DOCX（按正文顺序保留标题/段落/表格）、HTML 正文结构、CSV 行记录，以及 JSON/JSONL 记录边界。扫描型 PDF 不会静默产出空索引，而是明确提示启用后续 OCR extra。
+当前内置格式还包括：文本型 PDF（保留一基页码）、DOCX（按正文顺序保留标题/段落/表格）、HTML 正文结构、CSV 行记录、JSON/JSONL 记录边界，以及 Excel 工作表行和 PowerPoint 幻灯片文本/表格。安装 `ocr` extra 后，图像型 PDF 会在文本解析无结果时自动走本地 OCR；该 extra 还需要系统中可执行的 Tesseract 和对应语言包（例如 `chi_sim`）。未安装 extras 时会返回明确的安装提示，不会静默产出空索引。
+
+Office 与 OCR 能力均保持离线：`tables` 提供 `.xlsx/.xlsm`，`office` 提供 `.pptx/.pptm`，`ocr` 使用本地 PyMuPDF 渲染页面和 Tesseract 识别。宏不会执行，Excel 以 `data_only=True` 读取缓存值。
 
 高级切块提供 Page Aware、Paragraph Packing、Table Row 和 Parent Child。Parent Child 的每个 child 都保存稳定 `parent_id` 与 parent 原文，后续 organizer 可以合并多个 child 命中而不依赖额外数据库。精确内容去重默认启用；近似去重必须显式设置阈值。

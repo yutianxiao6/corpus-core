@@ -33,7 +33,7 @@ source .venv/bin/activate
 
 系统没有 pip 时，`uv venv --seed .venv` 会在项目虚拟环境中安装 pip，不修改系统 Python。
 
-依赖按用途分为 `qdrant`、`embedding`、`documents`、`sparse`、`tables` 和 `ocr` extras；核心包只保留配置、LangChain 核心与切块协议所需依赖。
+依赖按用途分为 `qdrant`、`embedding`、`documents`、`sparse`、`tables`、`office` 和 `ocr` extras；核心包只保留配置、LangChain 核心与切块协议所需依赖。
 
 ## 验证
 

@@ -44,14 +44,24 @@ from offline_rag.contracts.indexing import (
 )
 from offline_rag.exceptions import ConfigurationError, OfflineRagError, UnsupportedDocumentError
 from offline_rag.indexing import IndexedSource, IngestionJournal, plan_sync
-from offline_rag.loaders import DocxLoader, MarkdownLoader, PdfLoader, TextLoader
+from offline_rag.loaders import (
+    DocxLoader,
+    ExcelLoader,
+    MarkdownLoader,
+    PdfLoader,
+    PowerPointLoader,
+    TextLoader,
+)
 from offline_rag.parsers import (
     DocxParser,
     HtmlParser,
     MarkdownParser,
+    OcrPdfParser,
     PdfParser,
+    PptxParser,
     StructuredTextParser,
     TextParser,
+    XlsxParser,
 )
 from offline_rag.ports import EmbeddingProvider, SparseEmbeddingProvider, VectorStorePort
 from offline_rag.sources import (
@@ -73,6 +83,10 @@ SUPPORTED_EXTENSIONS = (
     ".csv",
     ".json",
     ".jsonl",
+    ".xlsx",
+    ".xlsm",
+    ".pptx",
+    ".pptm",
 )
 
 
@@ -118,6 +132,8 @@ class IngestionService:
         self._markdown_loader = MarkdownLoader()
         self._pdf_loader = PdfLoader()
         self._docx_loader = DocxLoader()
+        self._excel_loader = ExcelLoader()
+        self._powerpoint_loader = PowerPointLoader()
         self._structured_text_loader = TextLoader(
             extensions=(".html", ".htm", ".csv", ".json", ".jsonl"),
             media_types=("text/html", "text/csv", "application/json", "application/x-ndjson"),
@@ -125,7 +141,10 @@ class IngestionService:
         self._text_parser = TextParser()
         self._markdown_parser = MarkdownParser()
         self._pdf_parser = PdfParser()
+        self._ocr_pdf_parser = OcrPdfParser()
         self._docx_parser = DocxParser()
+        self._xlsx_parser = XlsxParser()
+        self._pptx_parser = PptxParser()
         self._html_parser = HtmlParser()
         self._finalizer = ChunkFinalizer()
 
@@ -409,9 +428,19 @@ class IngestionService:
         if suffix in (".md", ".markdown"):
             return self._markdown_parser.parse(self._markdown_loader.load(source))
         if suffix == ".pdf":
-            return self._pdf_parser.parse(self._pdf_loader.load(source))
+            loaded = self._pdf_loader.load(source)
+            try:
+                return self._pdf_parser.parse(loaded)
+            except Exception as exc:
+                if isinstance(exc, OfflineRagError) and "OCR" in str(exc):
+                    return self._ocr_pdf_parser.parse(loaded)
+                raise
         if suffix == ".docx":
             return self._docx_parser.parse(self._docx_loader.load(source))
+        if suffix in (".xlsx", ".xlsm"):
+            return self._xlsx_parser.parse(self._excel_loader.load(source))
+        if suffix in (".pptx", ".pptm"):
+            return self._pptx_parser.parse(self._powerpoint_loader.load(source))
         if suffix in (".html", ".htm"):
             return self._html_parser.parse(self._structured_text_loader.load(source))
         if suffix in (".csv", ".json", ".jsonl"):
@@ -536,7 +565,10 @@ def build_index_specification(
             "text": TextParser.version,
             "markdown": MarkdownParser.version,
             "pdf": PdfParser.version,
+            "pdf_ocr": OcrPdfParser.version,
             "docx": DocxParser.version,
+            "xlsx": XlsxParser.version,
+            "pptx": PptxParser.version,
             "html": HtmlParser.version,
             "structured_text": StructuredTextParser.version,
         },
