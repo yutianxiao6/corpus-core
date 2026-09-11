@@ -61,3 +61,5 @@ rag-index --config rag.yaml query "ERR-1042" --profile balanced --filter metadat
 Manifest、单文件 sidecar 与组合路由见 [docs/import-modes.md](docs/import-modes.md)。
 
 增量同步、journal、中断恢复、staging alias 和回滚见 [docs/index-lifecycle.md](docs/index-lifecycle.md)。
+
+原生 Python 检索结果和标准 LangChain `BaseRetriever` 接入见 [docs/querying.md](docs/querying.md)。

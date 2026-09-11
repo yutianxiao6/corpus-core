@@ -32,6 +32,23 @@ with OfflineRagEngine.from_config(config) as engine:
 
 组织阶段可返回独立切片、按文档分组、合并邻居、parent 正文、轮询多样性或 debug 明细。`RetrievalResult.groups` 保留结构化分组；`debug` 保留分数和预算决策；合并及 parent citation 始终指向原始证据 chunk，不指向临时合成 ID。
 
+## LangChain 接入
+
+`OfflineRagEngine` 可生成标准 `BaseRetriever`，直接用于 LangChain Runnable、Chain 或 Agent：
+
+```python
+from offline_rag import QueryOverrides
+
+retriever = engine.as_langchain_retriever(
+    profile="balanced",
+    overrides=QueryOverrides(filters={"metadata.department": "support"}, final_k=6),
+)
+documents = retriever.invoke("退款条件是什么？")
+documents = await retriever.ainvoke("退款条件是什么？")
+```
+
+每个 LangChain `Document` 的 `page_content` 是候选正文；metadata 包含 chunk/document/source/page、dense/sparse/fusion/rerank/final 分数、rank、origins、索引版本、embedding 指纹、原始 source metadata 和可用的 citation。metadata 会转换为普通 JSON 结构。适配器不拥有 engine 生命周期，应用关闭时仍由调用方关闭 engine。
+
 `RetrievalResult` 同时返回排序后的 chunk、阶段耗时、索引版本和 embedding 指纹。使用 Context organizer 时还会返回可直接交给上层 LLM 的 context 与结构化 citations。
 
 Qdrant Local 只适合单进程 CLI、预览和开发。同一个进程复用同一 `QdrantLocalVectorStore`；公司问答服务的多进程并发接入应使用后续的 Qdrant Server 适配器。

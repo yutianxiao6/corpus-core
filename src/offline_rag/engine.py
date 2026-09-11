@@ -7,7 +7,10 @@ import time
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
-from typing import Self
+from typing import TYPE_CHECKING, Self
+
+if TYPE_CHECKING:
+    from offline_rag.langchain import OfflineRagLangChainRetriever
 
 from offline_rag.config.models import OrganizerConfig, RagConfig, RerankerConfig, RetrievalProfile
 from offline_rag.contracts.common import JSONValue
@@ -167,6 +170,22 @@ class OfflineRagEngine:
 
     def sync(self, *inputs: str | Path) -> IngestionReport:
         return self.ingestion.sync(inputs, self.index_specification)
+
+    def as_langchain_retriever(
+        self,
+        *,
+        profile: str = "fast",
+        overrides: QueryOverrides | None = None,
+    ) -> OfflineRagLangChainRetriever:
+        from offline_rag.langchain import OfflineRagLangChainRetriever
+
+        if profile not in self.config.retrieval_profiles:
+            raise ValueError(f"unknown retrieval profile: {profile}")
+        return OfflineRagLangChainRetriever(
+            engine=self,
+            profile=profile,
+            overrides=overrides or QueryOverrides(),
+        )
 
     def retrieve(
         self,

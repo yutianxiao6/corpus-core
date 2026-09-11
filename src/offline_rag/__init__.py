@@ -8,7 +8,12 @@ from offline_rag.contracts.documents import (
     SourceDescriptor,
 )
 from offline_rag.contracts.indexing import EmbeddingSpecification, IndexSpecification
-from offline_rag.contracts.retrieval import Citation, RetrievalCandidate, RetrievalResult
+from offline_rag.contracts.retrieval import (
+    Citation,
+    QueryOverrides,
+    RetrievalCandidate,
+    RetrievalResult,
+)
 from offline_rag.exceptions import OfflineRagError
 from offline_rag.registry import ComponentRegistry
 
@@ -23,6 +28,7 @@ __all__ = [
     "IndexSpecification",
     "OfflineRagError",
     "ParsedDocument",
+    "QueryOverrides",
     "RetrievalCandidate",
     "RetrievalResult",
     "SourceDescriptor",

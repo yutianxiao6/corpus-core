@@ -15,7 +15,7 @@
 |---|---:|---:|---:|
 | P0 | 13 | 0 | 0 |
 | P1 | 20 | 0 | 0 |
-| P2 | 12 | 0 | 7 |
+| P2 | 19 | 0 | 0 |
 | P3 | 0 | 0 | 10 |
 
 ## P0：架构基础
@@ -100,7 +100,7 @@
 - [x] `P2-016` 实现 threshold、MMR、neighbor expansion 和多样性控制。
 - [x] `P2-017` 实现 Grouped、MergeNeighbors、Parent、Diverse、Debug organizer。
 - [x] `P2-018` 实现 Query Profile 和逐调用覆盖。
-- [ ] `P2-019` 实现 LangChain `BaseRetriever` 适配器。
+- [x] `P2-019` 实现 LangChain `BaseRetriever` 适配器。
 
 ## P3：并发、交付与高级扩展
 

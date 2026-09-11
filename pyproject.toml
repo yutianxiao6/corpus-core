@@ -63,6 +63,10 @@ module = ["langchain_text_splitters", "langchain_text_splitters.*"]
 follow_imports = "skip"
 
 [[tool.mypy.overrides]]
+module = ["langchain_core", "langchain_core.*"]
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
 module = ["sentence_transformers", "sentence_transformers.*"]
 follow_imports = "skip"
 
