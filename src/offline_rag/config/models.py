@@ -103,6 +103,30 @@ class TableRowsChunkProfile(StrictModel):
     max_rows_per_chunk: int = Field(default=10, gt=0)
 
 
+class PageAwareChunkProfile(StrictModel):
+    type: Literal["page_aware"]
+    chunk_size: int = Field(default=1000, gt=0)
+    chunk_overlap: int = Field(default=100, ge=0)
+
+    @model_validator(mode="after")
+    def validate_sizes(self) -> PageAwareChunkProfile:
+        if self.chunk_overlap >= self.chunk_size:
+            raise ValueError("chunk_overlap must be smaller than chunk_size")
+        return self
+
+
+class ParagraphPackingChunkProfile(StrictModel):
+    type: Literal["paragraph_packing"]
+    target_size: int = Field(default=800, gt=0)
+    maximum_size: int = Field(default=1000, gt=0)
+
+    @model_validator(mode="after")
+    def validate_sizes(self) -> ParagraphPackingChunkProfile:
+        if self.target_size > self.maximum_size:
+            raise ValueError("target_size must not exceed maximum_size")
+        return self
+
+
 class SyntaxChunkProfile(StrictModel):
     type: Literal["syntax"]
     fallback_profile: str = "default"
@@ -126,6 +150,8 @@ class ParentChildChunkProfile(StrictModel):
 ChunkProfile = Annotated[
     RecursiveChunkProfile
     | HeadingRecursiveChunkProfile
+    | PageAwareChunkProfile
+    | ParagraphPackingChunkProfile
     | TableRowsChunkProfile
     | SyntaxChunkProfile
     | ParentChildChunkProfile,
@@ -136,11 +162,12 @@ ChunkProfile = Annotated[
 class RouteMatch(StrictModel):
     extensions: tuple[str, ...] = ()
     filename_patterns: tuple[str, ...] = ()
+    path_patterns: tuple[str, ...] = ()
     metadata: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def require_condition(self) -> RouteMatch:
-        if not (self.extensions or self.filename_patterns or self.metadata):
+        if not (self.extensions or self.filename_patterns or self.path_patterns or self.metadata):
             raise ValueError("a routing match needs at least one condition")
         return self
 

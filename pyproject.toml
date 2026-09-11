@@ -8,7 +8,7 @@ version = "0.1.0.dev0"
 description = "Configurable offline retrieval core for RAG systems"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "Proprietary" }
+license = "LicenseRef-Proprietary"
 authors = []
 dependencies = [
     "langchain-core>=1.0",
@@ -68,4 +68,8 @@ follow_imports = "skip"
 
 [[tool.mypy.overrides]]
 module = ["qdrant_client", "qdrant_client.*"]
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+module = ["bs4", "bs4.*", "docx", "docx.*", "pypdf", "pypdf.*"]
 follow_imports = "skip"

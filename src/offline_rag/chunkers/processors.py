@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import replace
 
@@ -140,3 +142,58 @@ class HeadingContextInjector:
             embedding_text = self._separator.join((*context, body)) if context else body
             result.append(replace(chunk, embedding_text=embedding_text))
         return tuple(result)
+
+
+class ChunkDeduplicator:
+    """Order-preserving exact and optional near-duplicate removal."""
+
+    def __init__(
+        self,
+        *,
+        approximate_threshold: float | None = None,
+        shingle_size: int = 4,
+    ) -> None:
+        if approximate_threshold is not None and not 0 < approximate_threshold <= 1:
+            raise ValueError("approximate_threshold must be in (0, 1]")
+        if shingle_size <= 0:
+            raise ValueError("shingle_size must be positive")
+        self._threshold = approximate_threshold
+        self._shingle_size = shingle_size
+
+    def process(self, chunks: Sequence[ChunkDraft]) -> Sequence[ChunkDraft]:
+        accepted: list[ChunkDraft] = []
+        normalized_values: set[str] = set()
+        shingles: list[frozenset[str]] = []
+        for chunk in chunks:
+            normalized = self._normalize(chunk.content)
+            if normalized in normalized_values:
+                continue
+            candidate_shingles = self._shingles(normalized)
+            if self._threshold is not None and any(
+                self._jaccard(candidate_shingles, existing) >= self._threshold
+                for existing in shingles
+            ):
+                continue
+            accepted.append(chunk)
+            normalized_values.add(normalized)
+            shingles.append(candidate_shingles)
+        return tuple(accepted)
+
+    @staticmethod
+    def _normalize(content: str) -> str:
+        value = unicodedata.normalize("NFKC", content).casefold()
+        return re.sub(r"\s+", " ", value).strip()
+
+    def _shingles(self, content: str) -> frozenset[str]:
+        compact = re.sub(r"\s+", "", content)
+        if len(compact) <= self._shingle_size:
+            return frozenset((compact,))
+        return frozenset(
+            compact[index : index + self._shingle_size]
+            for index in range(len(compact) - self._shingle_size + 1)
+        )
+
+    @staticmethod
+    def _jaccard(first: frozenset[str], second: frozenset[str]) -> float:
+        union = first | second
+        return len(first & second) / len(union) if union else 1.0

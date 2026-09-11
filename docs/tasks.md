@@ -15,7 +15,7 @@
 |---|---:|---:|---:|
 | P0 | 13 | 0 | 0 |
 | P1 | 20 | 0 | 0 |
-| P2 | 0 | 0 | 19 |
+| P2 | 9 | 0 | 10 |
 | P3 | 0 | 0 | 10 |
 
 ## P0：架构基础
@@ -82,15 +82,15 @@
 
 ## P2：可靠导入与完整检索
 
-- [ ] `P2-001` 实现 PDF 文本解析并保留页码。
-- [ ] `P2-002` 实现 DOCX 标题、段落和表格解析。
-- [ ] `P2-003` 实现 HTML 正文与结构解析。
-- [ ] `P2-004` 实现 CSV/JSON/JSONL 结构解析。
-- [ ] `P2-005` 实现 Manifest 与 sidecar 配置。
-- [ ] `P2-006` 实现按扩展名、路径和 metadata 的 routing。
-- [ ] `P2-007` 实现 Page Aware、Paragraph Packing 和 Table Row chunker。
-- [ ] `P2-008` 实现 Parent Child chunker 与 parent 存储。
-- [ ] `P2-009` 实现内容去重和近似重复检测。
+- [x] `P2-001` 实现 PDF 文本解析并保留页码。
+- [x] `P2-002` 实现 DOCX 标题、段落和表格解析。
+- [x] `P2-003` 实现 HTML 正文与结构解析。
+- [x] `P2-004` 实现 CSV/JSON/JSONL 结构解析。
+- [x] `P2-005` 实现 Manifest 与 sidecar 配置。
+- [x] `P2-006` 实现按扩展名、路径和 metadata 的 routing。
+- [x] `P2-007` 实现 Page Aware、Paragraph Packing 和 Table Row chunker。
+- [x] `P2-008` 实现 Parent Child chunker 与 parent 存储。
+- [x] `P2-009` 实现内容去重和近似重复检测。
 - [ ] `P2-010` 实现导入状态机、journal 和中断恢复。
 - [ ] `P2-011` 实现幂等增量新增、修改和删除同步。
 - [ ] `P2-012` 实现 staging collection、alias 切换和回滚。

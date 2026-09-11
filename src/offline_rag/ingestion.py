@@ -10,16 +10,25 @@ from pathlib import Path
 from typing import cast
 
 from offline_rag.chunkers import (
+    ChunkDeduplicator,
     ChunkFinalizer,
     ChunkSizeProcessor,
     HeadingContextInjector,
     HeadingRecursiveChunker,
+    PageAwareChunker,
+    ParagraphPackingChunker,
+    ParentChildChunker,
     RecursiveChunker,
+    TableRowChunker,
 )
 from offline_rag.config.models import (
     HeadingRecursiveChunkProfile,
+    PageAwareChunkProfile,
+    ParagraphPackingChunkProfile,
+    ParentChildChunkProfile,
     RagConfig,
     RecursiveChunkProfile,
+    TableRowsChunkProfile,
 )
 from offline_rag.contracts.chunks import Chunk
 from offline_rag.contracts.common import JSONValue
@@ -34,13 +43,36 @@ from offline_rag.contracts.indexing import (
     VectorRecord,
 )
 from offline_rag.exceptions import ConfigurationError, OfflineRagError, UnsupportedDocumentError
-from offline_rag.loaders import MarkdownLoader, TextLoader
-from offline_rag.parsers import MarkdownParser, TextParser
+from offline_rag.loaders import DocxLoader, MarkdownLoader, PdfLoader, TextLoader
+from offline_rag.parsers import (
+    DocxParser,
+    HtmlParser,
+    MarkdownParser,
+    PdfParser,
+    StructuredTextParser,
+    TextParser,
+)
 from offline_rag.ports import EmbeddingProvider, VectorStorePort
-from offline_rag.sources import DiscoveryOptions, FileSystemSourceProvider
+from offline_rag.sources import (
+    DiscoveryOptions,
+    FileSystemSourceProvider,
+    ManifestSourceProvider,
+    apply_sidecar,
+)
 from offline_rag.vectorstores import chunk_to_payload
 
-SUPPORTED_EXTENSIONS = (".txt", ".md", ".markdown")
+SUPPORTED_EXTENSIONS = (
+    ".txt",
+    ".md",
+    ".markdown",
+    ".pdf",
+    ".docx",
+    ".html",
+    ".htm",
+    ".csv",
+    ".json",
+    ".jsonl",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,8 +111,17 @@ class IngestionService:
         self._token_counter = token_counter
         self._text_loader = TextLoader()
         self._markdown_loader = MarkdownLoader()
+        self._pdf_loader = PdfLoader()
+        self._docx_loader = DocxLoader()
+        self._structured_text_loader = TextLoader(
+            extensions=(".html", ".htm", ".csv", ".json", ".jsonl"),
+            media_types=("text/html", "text/csv", "application/json", "application/x-ndjson"),
+        )
         self._text_parser = TextParser()
         self._markdown_parser = MarkdownParser()
+        self._pdf_parser = PdfParser()
+        self._docx_parser = DocxParser()
+        self._html_parser = HtmlParser()
         self._finalizer = ChunkFinalizer()
 
     def preview(
@@ -173,7 +214,11 @@ class IngestionService:
             ignore_patterns=ingestion.ignore_patterns,
             allowed_extensions=SUPPORTED_EXTENSIONS,
         )
-        return tuple(FileSystemSourceProvider(inputs, root=root, options=options).discover())
+        if len(inputs) == 1 and Path(inputs[0]).suffix.lower() in (".yaml", ".yml"):
+            sources = ManifestSourceProvider(inputs[0], options=options).discover()
+        else:
+            sources = FileSystemSourceProvider(inputs, root=root, options=options).discover()
+        return tuple(apply_sidecar(source) for source in sources)
 
     def _parse(self, source: SourceDescriptor) -> ParsedDocument:
         suffix = Path(source.relative_path or source.uri).suffix.lower()
@@ -181,6 +226,16 @@ class IngestionService:
             return self._text_parser.parse(self._text_loader.load(source))
         if suffix in (".md", ".markdown"):
             return self._markdown_parser.parse(self._markdown_loader.load(source))
+        if suffix == ".pdf":
+            return self._pdf_parser.parse(self._pdf_loader.load(source))
+        if suffix == ".docx":
+            return self._docx_parser.parse(self._docx_loader.load(source))
+        if suffix in (".html", ".htm"):
+            return self._html_parser.parse(self._structured_text_loader.load(source))
+        if suffix in (".csv", ".json", ".jsonl"):
+            return StructuredTextParser(suffix.removeprefix(".")).parse(
+                self._structured_text_loader.load(source)
+            )
         raise UnsupportedDocumentError(
             "no built-in parser supports this source",
             details={"source_id": source.source_id, "extension": suffix},
@@ -215,17 +270,44 @@ class IngestionService:
                 chunk_overlap=profile.chunk_overlap,
             )
             drafts = chunker.split(document)
+        elif isinstance(profile, PageAwareChunkProfile):
+            drafts = PageAwareChunker(
+                chunk_size=profile.chunk_size, chunk_overlap=profile.chunk_overlap
+            ).split(document)
+        elif isinstance(profile, ParagraphPackingChunkProfile):
+            drafts = ParagraphPackingChunker(
+                target_size=profile.target_size, maximum_size=profile.maximum_size
+            ).split(document)
+        elif isinstance(profile, TableRowsChunkProfile):
+            drafts = TableRowChunker(
+                max_rows_per_chunk=profile.max_rows_per_chunk,
+                repeat_headers=profile.repeat_headers,
+            ).split(document)
+        elif isinstance(profile, ParentChildChunkProfile):
+            drafts = ParentChildChunker(
+                parent_size=profile.parent_size,
+                child_size=profile.child_size,
+                child_overlap=profile.child_overlap,
+            ).split(document)
         else:
             raise UnsupportedDocumentError(
                 f"chunk profile type is not implemented in P1: {profile.type}"
             )
         if getattr(profile, "include_heading_in_embedding", True):
             drafts = HeadingContextInjector().process(drafts)
+        drafts = ChunkDeduplicator().process(drafts)
         return self._finalizer.finalize(drafts)
 
     def _profile_for(self, source: SourceDescriptor) -> str:
         relative_path = source.relative_path or Path(source.uri).name
         extension = Path(relative_path).suffix.lower()
+        explicit_profile = source.metadata.get("rag_profile")
+        if isinstance(explicit_profile, str):
+            if explicit_profile not in self._config.chunk_profiles:
+                raise ConfigurationError(
+                    f"source references unknown chunk profile: {explicit_profile}"
+                )
+            return explicit_profile
         for rule in self._config.routing:
             extension_match = not rule.match.extensions or extension in {
                 value.lower() for value in rule.match.extensions
@@ -234,10 +316,13 @@ class IngestionService:
                 fnmatch.fnmatchcase(Path(relative_path).name, pattern)
                 for pattern in rule.match.filename_patterns
             )
+            path_match = not rule.match.path_patterns or any(
+                fnmatch.fnmatchcase(relative_path, pattern) for pattern in rule.match.path_patterns
+            )
             metadata_match = all(
                 source.metadata.get(key) == value for key, value in rule.match.metadata.items()
             )
-            if extension_match and filename_match and metadata_match:
+            if extension_match and filename_match and path_match and metadata_match:
                 return rule.use
         if extension in (".md", ".markdown") and "markdown_heading" in self._config.chunk_profiles:
             return "markdown_heading"
@@ -263,6 +348,13 @@ def build_index_specification(
         index_format_version=1,
         payload_schema_version=1,
         embedding=embedding,
-        parser_versions={"text": TextParser.version, "markdown": MarkdownParser.version},
+        parser_versions={
+            "text": TextParser.version,
+            "markdown": MarkdownParser.version,
+            "pdf": PdfParser.version,
+            "docx": DocxParser.version,
+            "html": HtmlParser.version,
+            "structured_text": StructuredTextParser.version,
+        },
         chunking_configuration=chunking,
     )

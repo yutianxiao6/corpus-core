@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from offline_rag.chunkers import (
+    ChunkDeduplicator,
     ChunkFinalizer,
     ChunkSizeProcessor,
     HeadingContextInjector,
@@ -130,6 +131,24 @@ class ChunkProcessorTests(unittest.TestCase):
 
         self.assertEqual(result.content, "正文内容")
         self.assertEqual(result.embedding_text, "手册\n\n安装\n\n正文内容")
+
+    def test_exact_and_optional_near_duplicates_are_order_preserving(self) -> None:
+        chunks = [
+            self._draft("Install  the package version 1.0"),
+            self._draft("install the package version 1.0"),
+            self._draft("Install the package version 1.0 now"),
+            self._draft("Install the package version 2.0"),
+        ]
+        exact = ChunkDeduplicator().process(chunks)
+        approximate = ChunkDeduplicator(approximate_threshold=0.85).process(chunks)
+
+        self.assertEqual(
+            [item.content for item in exact],
+            [chunks[0].content, chunks[2].content, chunks[3].content],
+        )
+        self.assertEqual(approximate[0].content, chunks[0].content)
+        self.assertLess(len(approximate), len(exact))
+        self.assertIn(chunks[3], approximate)
 
 
 class ChunkFinalizerTests(unittest.TestCase):
