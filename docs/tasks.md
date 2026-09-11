@@ -16,7 +16,7 @@
 | P0 | 13 | 0 | 0 |
 | P1 | 20 | 0 | 0 |
 | P2 | 19 | 0 | 0 |
-| P3 | 6 | 0 | 4 |
+| P3 | 7 | 0 | 3 |
 
 ## P0：架构基础
 
@@ -110,7 +110,7 @@
 - [x] `P3-004` 实现查询与导入并行压力测试。
 - [x] `P3-005` 实现完整评测工具和回归门槛。
 - [x] `P3-006` 实现索引备份、恢复与恢复验证。
-- [ ] `P3-007` 生成离线 wheelhouse、模型 bundle 和 checksum。
+- [x] `P3-007` 生成离线 wheelhouse、模型 bundle 和 checksum。
 - [ ] `P3-008` 实现 OCR、扫描 PDF、Excel 和 PowerPoint extras。
 - [ ] `P3-009` 实现代码 AST 和实验性 Semantic chunker。
 - [ ] `P3-010` 提供可选 HTTP 查询服务参考适配器。
