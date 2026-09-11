@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Sequence
 from contextlib import AbstractContextManager, nullcontext
+from pathlib import Path
 
 from qdrant_client import AsyncQdrantClient, QdrantClient
 from qdrant_client.http import models
@@ -78,6 +80,36 @@ class QdrantServerVectorStore(QdrantLocalVectorStore):
         view._owns_async_client = False
         view._sparse_enabled = False
         return view
+
+    def backup(
+        self,
+        destination: str | Path,
+        *,
+        index_fingerprint: str | None = None,
+    ) -> dict[str, object]:
+        """Request a server-side snapshot and save a portable restore descriptor."""
+
+        try:
+            snapshot = self._client.create_snapshot(self._collection_name, wait=True)
+            name = getattr(snapshot, "name", None)
+            if not isinstance(name, str) or not name:
+                raise VectorStoreError("Qdrant Server returned an invalid snapshot name")
+            manifest: dict[str, object] = {
+                "format_version": 1,
+                "mode": "server",
+                "collection_name": self._collection_name,
+                "snapshot_name": name,
+                "index_fingerprint": index_fingerprint,
+            }
+            destination_path = Path(destination).expanduser().resolve()
+            destination_path.parent.mkdir(parents=True, exist_ok=True)
+            with destination_path.open("w", encoding="utf-8") as stream:
+                json.dump(manifest, stream, ensure_ascii=False, sort_keys=True, indent=2)
+            return manifest
+        except VectorStoreError:
+            raise
+        except Exception as exc:
+            raise VectorStoreError("cannot create Qdrant Server snapshot") from exc
 
     async def asearch(self, request: SearchRequest) -> Sequence[SearchHit]:
         if request.vector is SearchVector.SPARSE and not self._sparse_enabled:

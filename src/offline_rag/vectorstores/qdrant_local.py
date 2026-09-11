@@ -14,6 +14,7 @@ from typing import Self
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
+from offline_rag.backup import create_local_backup
 from offline_rag.contracts.common import JSONValue
 from offline_rag.contracts.indexing import (
     DeleteReport,
@@ -124,6 +125,22 @@ class QdrantLocalVectorStore:
                     self._client.delete_collection(collection_name)
             except Exception as exc:
                 raise VectorStoreError("cannot drop Qdrant collection") from exc
+
+    def backup(
+        self,
+        destination: str | Path,
+        *,
+        index_fingerprint: str | None = None,
+    ) -> dict[str, object]:
+        """Create a consistent archive while holding the Local client lock."""
+
+        with self._lock:
+            return create_local_backup(
+                self._path,
+                destination,
+                collection_name=self._collection_name,
+                index_fingerprint=index_fingerprint,
+            )
 
     def collection(self, collection_name: str) -> QdrantLocalVectorStore:
         """Return a non-owning view backed by this instance's single local client."""

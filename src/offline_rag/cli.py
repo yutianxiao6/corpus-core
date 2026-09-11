@@ -76,6 +76,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     query_parser.add_argument("--json", action="store_true")
 
+    backup_parser = subparsers.add_parser("backup", help="create a vector index backup")
+    backup_parser.add_argument("destination", type=Path)
+    backup_parser.add_argument("--json", action="store_true")
+
+    restore_parser = subparsers.add_parser("restore", help="restore a vector index backup")
+    restore_parser.add_argument("archive", type=Path)
+    restore_parser.add_argument("--yes", action="store_true", help="replace the configured index")
+    restore_parser.add_argument("--json", action="store_true")
+
     evaluate_parser = subparsers.add_parser("evaluate", help="evaluate retrieval on a JSON fixture")
     evaluate_parser.add_argument("fixture", type=Path)
     evaluate_parser.add_argument("--profile", default="fast")
@@ -139,6 +148,10 @@ def main(argv: list[str] | None = None) -> int:
                 },
                 as_json=args.json,
             )
+        if args.command == "backup":
+            return _backup(config, args.destination, as_json=args.json)
+        if args.command == "restore":
+            return _restore(config, args.archive, confirmed=args.yes, as_json=args.json)
         if args.command == "doctor":
             return _doctor(config)
     except (OfflineRagError, OSError, TypeError, ValueError) as exc:
@@ -361,6 +374,77 @@ def _evaluate(
         ).evaluate(examples, k=k)
     assert_thresholds(report, minimums)
     _print_data(report.to_dict(), as_json=as_json)
+    return 0
+
+
+def _backup(config: RagConfig, destination: Path, *, as_json: bool) -> int:
+    vector_config = config.vector_store
+    if vector_config.mode == "local":
+        from offline_rag.vectorstores import QdrantLocalVectorStore
+
+        assert vector_config.path is not None
+        with QdrantLocalVectorStore(
+            vector_config.path, collection_name=vector_config.collection_alias
+        ) as store:
+            manifest = store.backup(destination)
+    else:
+        from offline_rag.vectorstores import QdrantServerVectorStore
+
+        assert vector_config.url is not None
+        api_key = os.environ.get(vector_config.api_key_env) if vector_config.api_key_env else None
+        with QdrantServerVectorStore(
+            vector_config.url,
+            collection_name=vector_config.collection_alias,
+            api_key=api_key,
+            prefer_grpc=vector_config.prefer_grpc,
+            timeout_seconds=vector_config.timeout_seconds,
+            pool_size=vector_config.pool_size,
+        ) as store:
+            manifest = store.backup(destination)
+    _print_data(manifest, as_json=as_json)
+    return 0
+
+
+def _restore(config: RagConfig, archive: Path, *, confirmed: bool, as_json: bool) -> int:
+    if not confirmed:
+        raise ValueError("restore replaces the configured index; pass --yes explicitly")
+    vector_config = config.vector_store
+    if vector_config.mode == "local":
+        from offline_rag.backup import restore_local_backup
+
+        assert vector_config.path is not None
+        manifest = restore_local_backup(
+            archive,
+            vector_config.path,
+            collection_name=vector_config.collection_alias,
+            replace_existing=True,
+        )
+    else:
+        from qdrant_client import QdrantClient
+
+        from offline_rag.backup import read_server_backup
+
+        assert vector_config.url is not None
+        api_key = os.environ.get(vector_config.api_key_env) if vector_config.api_key_env else None
+        manifest = read_server_backup(archive, collection_name=vector_config.collection_alias)
+        client = QdrantClient(
+            url=vector_config.url,
+            api_key=api_key,
+            prefer_grpc=vector_config.prefer_grpc,
+            timeout=vector_config.timeout_seconds,
+            pool_size=vector_config.pool_size,
+            cloud_inference=False,
+            check_compatibility=False,
+        )
+        try:
+            client.recover_snapshot(
+                collection_name=vector_config.collection_alias,
+                location=str(manifest["snapshot_name"]),
+                wait=True,
+            )
+        finally:
+            client.close()
+    _print_data(manifest, as_json=as_json)
     return 0
 
 
