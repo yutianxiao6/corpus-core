@@ -76,6 +76,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     query_parser.add_argument("--json", action="store_true")
 
+    evaluate_parser = subparsers.add_parser("evaluate", help="evaluate retrieval on a JSON fixture")
+    evaluate_parser.add_argument("fixture", type=Path)
+    evaluate_parser.add_argument("--profile", default="fast")
+    evaluate_parser.add_argument("--k", type=int, default=5)
+    evaluate_parser.add_argument("--min-recall", type=float)
+    evaluate_parser.add_argument("--min-precision", type=float)
+    evaluate_parser.add_argument("--min-mrr", type=float)
+    evaluate_parser.add_argument("--min-ndcg", type=float)
+    evaluate_parser.add_argument("--json", action="store_true")
+
     subparsers.add_parser("doctor", help="validate local configuration and resources")
     return parser
 
@@ -109,6 +119,24 @@ def main(argv: list[str] | None = None) -> int:
                 final_k=args.final_k,
                 score_threshold=args.score_threshold,
                 filters=_parse_filters(args.filter),
+                as_json=args.json,
+            )
+        if args.command == "evaluate":
+            return _evaluate(
+                config,
+                args.fixture,
+                profile=args.profile,
+                k=args.k,
+                minimums={
+                    metric: value
+                    for metric, value in {
+                        "recall_at_k": args.min_recall,
+                        "precision_at_k": args.min_precision,
+                        "mrr_at_k": args.min_mrr,
+                        "ndcg_at_k": args.min_ndcg,
+                    }.items()
+                    if value is not None
+                },
                 as_json=args.json,
             )
         if args.command == "doctor":
@@ -312,6 +340,28 @@ def _doctor(config: RagConfig) -> int:
     ok = all(bool(item["ok"]) for item in checks)
     _print_data({"ok": ok, "checks": checks}, as_json=True)
     return 0 if ok else 1
+
+
+def _evaluate(
+    config: RagConfig,
+    fixture: Path,
+    *,
+    profile: str,
+    k: int,
+    minimums: Mapping[str, float],
+    as_json: bool,
+) -> int:
+    from offline_rag.engine import OfflineRagEngine
+    from offline_rag.evaluation import RetrievalEvaluator, assert_thresholds, load_examples
+
+    examples = load_examples(fixture)
+    with OfflineRagEngine.from_config(config) as engine:
+        report = RetrievalEvaluator(
+            lambda query, limit: engine.retrieve(query, profile=profile, final_k=limit).hits
+        ).evaluate(examples, k=k)
+    assert_thresholds(report, minimums)
+    _print_data(report.to_dict(), as_json=as_json)
+    return 0
 
 
 def _print_data(data: Mapping[str, object], *, as_json: bool) -> None:

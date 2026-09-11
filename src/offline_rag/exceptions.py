@@ -74,6 +74,10 @@ class RerankerError(OfflineRagError):
     code = "reranker_error"
 
 
+class EvaluationRegressionError(OfflineRagError):
+    code = "evaluation_regression"
+
+
 class ContextBudgetError(OfflineRagError):
     code = "context_budget_error"
 

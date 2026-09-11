@@ -18,6 +18,7 @@ Offline RAG Retriever 是一个面向本地部署的通用 Python 检索组件�
 - 原生支持同步、异步与保持输入顺序的批量查询，LangChain `invoke/ainvoke` 均走对应链路。
 
 完整设计见 [docs/design.md](docs/design.md)。
+评测格式与指标门槛见 [docs/evaluation.md](docs/evaluation.md)。
 
 ## 开发环境
 

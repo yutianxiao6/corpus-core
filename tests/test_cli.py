@@ -32,6 +32,15 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.final_k, 3)
         self.assertEqual(_parse_filters(["department=support", "acl=[1, 2]"])["acl"], (1, 2))
 
+    def test_evaluate_parser_has_metric_gates(self) -> None:
+        args = build_parser().parse_args(
+            ["evaluate", "eval.jsonl", "--k", "8", "--min-recall", "0.8", "--json"]
+        )
+        self.assertEqual(args.fixture, Path("eval.jsonl"))
+        self.assertEqual(args.k, 8)
+        self.assertEqual(args.min_recall, 0.8)
+        self.assertTrue(args.json)
+
     def test_empty_invocation_prints_help(self) -> None:
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
