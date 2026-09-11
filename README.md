@@ -41,6 +41,12 @@ ruff format --check .
 mypy src
 ```
 
+并行存储层压力回归：
+
+```bash
+python -m pytest -q tests/test_concurrent_workload.py
+```
+
 可跟踪实施计划见 [docs/tasks.md](docs/tasks.md)。
 
 配置、插件和开发说明分别见 [docs/configuration.md](docs/configuration.md)、[docs/plugins.md](docs/plugins.md) 和 [docs/development.md](docs/development.md)。
