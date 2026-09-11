@@ -274,6 +274,29 @@ class QdrantLocalVectorStore:
             hits.append(SearchHit(chunk_id=chunk_id, score=float(point.score), payload=payload))
         return tuple(hits)
 
+    def fetch(self, chunk_ids: Sequence[str]) -> Sequence[SearchHit]:
+        unique_ids = tuple(dict.fromkeys(chunk_ids))
+        if not unique_ids:
+            return ()
+        with self._lock:
+            try:
+                points = self._client.retrieve(
+                    collection_name=self._collection_name,
+                    ids=[self._point_id(chunk_id) for chunk_id in unique_ids],
+                    with_payload=True,
+                    with_vectors=False,
+                )
+            except Exception as exc:
+                raise VectorStoreError("Qdrant Local payload fetch failed") from exc
+        by_id: dict[str, SearchHit] = {}
+        for point in points:
+            payload = point.payload or {}
+            chunk_id = payload.get("chunk_id")
+            if not isinstance(chunk_id, str):
+                raise VectorStoreError("Qdrant point is missing its chunk_id payload")
+            by_id[chunk_id] = SearchHit(chunk_id=chunk_id, score=0.0, payload=payload)
+        return tuple(by_id[chunk_id] for chunk_id in unique_ids if chunk_id in by_id)
+
     async def asearch(self, request: SearchRequest) -> Sequence[SearchHit]:
         return await asyncio.to_thread(self.search, request)
 

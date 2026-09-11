@@ -206,7 +206,11 @@ class RetrievalProfile(StrictModel):
     fusion: FusionConfig | None = None
     reranker: str | None = None
     rerank_top_n: int | None = Field(default=None, gt=0)
+    score_threshold: float | None = None
+    mmr_lambda: float | None = Field(default=None, ge=0, le=1)
+    mmr_fetch_k: int | None = Field(default=None, gt=0)
     neighbor_expansion: int = Field(default=0, ge=0)
+    maximum_chunks_per_document: int | None = Field(default=None, gt=0)
     final_k: int = Field(default=5, gt=0)
     organizer: str = "flat"
 
@@ -280,6 +284,15 @@ class RagConfig(StrictModel):
                     f"routing rule {position} references missing chunk profile {rule.use!r}"
                 )
         for name, retrieval_profile in self.retrieval_profiles.items():
+            if retrieval_profile.mmr_fetch_k is not None and retrieval_profile.mmr_lambda is None:
+                raise ValueError(
+                    f"retrieval profile {name!r} configures mmr_fetch_k without mmr_lambda"
+                )
+            if (
+                retrieval_profile.mmr_fetch_k is not None
+                and retrieval_profile.mmr_fetch_k < retrieval_profile.final_k
+            ):
+                raise ValueError(f"retrieval profile {name!r} mmr_fetch_k must be at least final_k")
             if retrieval_profile.strategy in ("sparse", "hybrid") and self.sparse_embedding is None:
                 raise ValueError(
                     f"retrieval profile {name!r} requires sparse_embedding configuration"

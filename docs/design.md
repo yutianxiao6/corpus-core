@@ -601,6 +601,10 @@ retrieval_profiles:
       constant: 60
     reranker: qwen_local
     rerank_top_n: 30
+    score_threshold: 0.35
+    mmr_lambda: 0.65
+    mmr_fetch_k: 30
+    maximum_chunks_per_document: 3
     neighbor_expansion: 1
     final_k: 8
     organizer: context

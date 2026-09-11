@@ -15,6 +15,8 @@ with OfflineRagEngine.from_config(config) as engine:
 
 配置 reranker 后，查询会按 `rerank_top_n` 扩大召回池，使用本地 Qwen3 CrossEncoder 重新打分，最后才裁剪到 `final_k`。`rerank_score` 保留在结果中；模型失败时按配置选择降级到原召回顺序并附 warning，或让查询失败。
 
+查询 profile 还支持 `score_threshold`、`mmr_lambda`/`mmr_fetch_k`、`maximum_chunks_per_document` 和 `neighbor_expansion`。MMR 会对候选正文进行本地 dense 编码，换取更少重复的证据；邻居通过索引中的稳定相邻 ID 按批取回，不执行第二次相似度搜索。
+
 `RetrievalResult` 同时返回排序后的 chunk、阶段耗时、索引版本和 embedding 指纹。使用 Context organizer 时还会返回可直接交给上层 LLM 的 context 与结构化 citations。
 
 Qdrant Local 只适合单进程 CLI、预览和开发。同一个进程复用同一 `QdrantLocalVectorStore`；公司问答服务的多进程并发接入应使用后续的 Qdrant Server 适配器。

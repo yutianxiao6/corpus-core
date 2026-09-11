@@ -29,7 +29,11 @@ from offline_rag.rerankers import QwenCrossEncoderReranker
 from offline_rag.retrieval import (
     DenseSimilarityStrategy,
     HybridRetrievalStrategy,
+    MaximalMarginalRelevanceSelector,
+    NeighborExpander,
     SparseSimilarityStrategy,
+    limit_per_document,
+    score_threshold_filter,
 )
 from offline_rag.vectorstores import QdrantLocalVectorStore
 
@@ -160,13 +164,22 @@ class OfflineRagEngine:
         except KeyError as exc:
             raise ValueError(f"unknown retrieval profile: {profile}") from exc
         self.vector_store.ensure_index(self.index_specification)
-        retrieval_limit = (
-            max(
-                retrieval_profile.final_k,
-                retrieval_profile.rerank_top_n or retrieval_profile.final_k,
-            )
-            if retrieval_profile.reranker
-            else retrieval_profile.final_k
+        retrieval_limit = max(
+            retrieval_profile.final_k,
+            (
+                retrieval_profile.rerank_top_n or retrieval_profile.final_k
+                if retrieval_profile.reranker
+                else retrieval_profile.final_k
+            ),
+            (
+                retrieval_profile.mmr_fetch_k
+                or retrieval_profile.fetch_k
+                or retrieval_profile.dense_fetch_k
+                or retrieval_profile.sparse_fetch_k
+                or retrieval_profile.final_k * 4
+                if retrieval_profile.mmr_lambda is not None
+                else retrieval_profile.final_k
+            ),
         )
         options = RetrievalOptions(
             profile=profile,
@@ -231,8 +244,23 @@ class OfflineRagEngine:
                 warnings.append(
                     f"reranker {retrieval_profile.reranker!r} failed; returned recall order"
                 )
-        candidates = tuple(candidates[: retrieval_profile.final_k])
         reranked_at = time.perf_counter()
+        candidates = score_threshold_filter(candidates, retrieval_profile.score_threshold)
+        candidates = limit_per_document(candidates, retrieval_profile.maximum_chunks_per_document)
+        if retrieval_profile.mmr_lambda is not None:
+            candidates = MaximalMarginalRelevanceSelector(self.embedding).select(
+                query,
+                candidates,
+                limit=retrieval_profile.final_k,
+                relevance_weight=retrieval_profile.mmr_lambda,
+            )
+        else:
+            candidates = tuple(candidates[: retrieval_profile.final_k])
+        if retrieval_profile.neighbor_expansion:
+            candidates = NeighborExpander(self.vector_store).expand(
+                candidates, distance=retrieval_profile.neighbor_expansion
+            )
+        postprocessed_at = time.perf_counter()
         organizer_config = self.config.organizers.get(retrieval_profile.organizer)
         budget = self._budget(organizer_config)
         organizer = (
@@ -253,7 +281,8 @@ class OfflineRagEngine:
             timings_ms={
                 "retrieve": (retrieved_at - started) * 1000,
                 "rerank": (reranked_at - retrieved_at) * 1000,
-                "organize": (finished - reranked_at) * 1000,
+                "postprocess": (postprocessed_at - reranked_at) * 1000,
+                "organize": (finished - postprocessed_at) * 1000,
                 "total": (finished - started) * 1000,
             },
             warnings=(*warnings, *organized.warnings),

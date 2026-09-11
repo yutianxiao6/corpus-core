@@ -81,6 +81,25 @@ retrieval_profiles:
 
 `score_mode: sigmoid` 将 Qwen 输出的相关性 logit 转成 0–1 分数。`failure_policy: return_unranked` 会保留召回顺序并返回 warning；需要严格失败时改为 `fail`。`rerank_top_n` 必须不小于 `final_k`，且不能超过 `maximum_candidates`。
 
+## 检索后处理
+
+每个查询 profile 可独立配置阈值、MMR、文档多样性与邻居扩展：
+
+```yaml
+retrieval_profiles:
+  diverse:
+    strategy: dense
+    fetch_k: 40
+    score_threshold: 0.35
+    mmr_lambda: 0.65
+    mmr_fetch_k: 30
+    maximum_chunks_per_document: 3
+    neighbor_expansion: 1
+    final_k: 8
+```
+
+处理顺序是 rerank → threshold → 每文档主命中限制 → MMR → `final_k` → neighbor expansion。邻居用于补齐上下文，保留 `origins: [neighbor]`，但没有伪造的检索分数和排名。`score_threshold` 和 `mmr_lambda` 与模型、语料强相关，部署方必须用自己的固定评测集校准。
+
 ## 插件白名单
 
 `enabled_plugins` 只接受 `<kind>:<entry-point-name>`，例如：

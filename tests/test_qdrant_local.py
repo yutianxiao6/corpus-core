@@ -120,6 +120,8 @@ class QdrantLocalTests(unittest.TestCase):
                     SearchRequest([1.0, 0.0, 0.0], limit=2, filters={"document_id": "doc-b"})
                 )
                 self.assertEqual([hit.chunk_id for hit in filtered], ["chunk-b"])
+                fetched = store.fetch(["chunk-b", "missing", "chunk-a"])
+                self.assertEqual([hit.chunk_id for hit in fetched], ["chunk-b", "chunk-a"])
                 deleted = store.delete(["chunk-a", "does-not-exist"])
                 self.assertEqual(deleted.requested_count, 2)
                 self.assertEqual(deleted.deleted_count, 1)

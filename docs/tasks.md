@@ -97,7 +97,7 @@
 - [x] `P2-013` 实现 sparse vector 与 hybrid 检索。
 - [x] `P2-014` 实现 RRF 和归一化加权融合。
 - [x] `P2-015` 实现 Qwen3 本地 reranker。
-- [ ] `P2-016` 实现 threshold、MMR、neighbor expansion 和多样性控制。
+- [x] `P2-016` 实现 threshold、MMR、neighbor expansion 和多样性控制。
 - [ ] `P2-017` 实现 Grouped、MergeNeighbors、Parent、Diverse、Debug organizer。
 - [ ] `P2-018` 实现 Query Profile 和逐调用覆盖。
 - [ ] `P2-019` 实现 LangChain `BaseRetriever` 适配器。
