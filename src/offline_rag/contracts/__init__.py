@@ -1,0 +1,48 @@
+"""Stable data contracts used across the retrieval engine."""
+
+from offline_rag.contracts.chunks import Chunk, ChunkDraft
+from offline_rag.contracts.documents import (
+    ContentBlock,
+    ContentBlockType,
+    LoadedContent,
+    ParsedDocument,
+    SourceDescriptor,
+)
+from offline_rag.contracts.indexing import (
+    DeleteReport,
+    EmbeddingSpecification,
+    IndexSpecification,
+    IngestionReport,
+    UpsertReport,
+    VectorRecord,
+)
+from offline_rag.contracts.retrieval import (
+    Citation,
+    OrganizedResult,
+    RetrievalCandidate,
+    RetrievalResult,
+    SearchHit,
+    SearchRequest,
+)
+
+__all__ = [
+    "Chunk",
+    "ChunkDraft",
+    "Citation",
+    "ContentBlock",
+    "ContentBlockType",
+    "DeleteReport",
+    "EmbeddingSpecification",
+    "IndexSpecification",
+    "IngestionReport",
+    "LoadedContent",
+    "OrganizedResult",
+    "ParsedDocument",
+    "RetrievalCandidate",
+    "RetrievalResult",
+    "SearchHit",
+    "SearchRequest",
+    "SourceDescriptor",
+    "UpsertReport",
+    "VectorRecord",
+]

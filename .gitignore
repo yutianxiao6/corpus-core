@@ -1,0 +1,25 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+dist/
+build/
+
+# Local runtime data and downloaded models must not enter source control.
+data/
+documents/
+models/
+logs/
+backups/
+*.log
+
+# Local configuration may contain deployment-specific secrets or paths.
+rag.local.yaml
+.env
+

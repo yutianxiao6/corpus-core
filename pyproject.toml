@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "offline-rag-retriever"
+version = "0.1.0.dev0"
+description = "Configurable offline retrieval core for RAG systems"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = []
+dependencies = [
+    "langchain-core>=1.0",
+    "langchain-text-splitters>=1.0",
+    "pydantic>=2.10",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+qdrant = ["langchain-qdrant>=1.0", "qdrant-client>=1.10"]
+embedding = ["langchain-huggingface>=1.0", "sentence-transformers>=5.0"]
+documents = [
+    "beautifulsoup4>=4.12",
+    "charset-normalizer>=3.3",
+    "lxml>=5.0",
+    "pypdf>=5.0",
+    "python-docx>=1.1",
+]
+sparse = ["fastembed>=0.7"]
+tables = ["openpyxl>=3.1"]
+ocr = ["pillow>=10", "pytesseract>=0.3"]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.15",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.11",
+    "types-PyYAML>=6.0",
+]
+
+[project.scripts]
+rag-index = "offline_rag.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.mypy]
+python_version = "3.11"
+strict = true

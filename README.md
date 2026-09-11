@@ -1,0 +1,43 @@
+# Offline RAG Retriever
+
+Offline RAG Retriever 是一个面向本地部署的通用 Python 检索组件。它负责文档发现、解析、切块、向量化、索引维护、检索、重排和上下文组织；上层问答系统只需要调用检索接口并接入自己的 LLM。
+
+当前已进入实现阶段：架构设计、公共数据契约、组件协议与注册表、异常层级、严格配置系统和工程质量基线已经完成。
+
+## 已确定的边界
+
+- 完全离线运行。
+- 中英文混合检索。
+- 单部署实例、单知识库，不实现多租户平台。
+- 不按业务领域划分索引，但允许按文档结构选择解析和切块方式。
+- 没有 UI；提供索引 CLI 和 Python SDK。
+- 使用 LangChain 作为组件集成层。
+- 使用一个本地向量数据库，默认规划为 Qdrant。
+- 检索模块不负责最终答案生成。
+- 能作为库直接接入公司的问答 AI。
+
+完整设计见 [docs/design.md](docs/design.md)。
+
+## 开发环境
+
+仓库使用 `uv.lock` 锁定所有直接和传递依赖。安装完整本地检索开发环境：
+
+```bash
+uv sync --all-extras
+source .venv/bin/activate
+```
+
+系统没有 pip 时，`uv venv --seed .venv` 会在项目虚拟环境中安装 pip，不修改系统 Python。
+
+依赖按用途分为 `qdrant`、`embedding`、`documents`、`sparse`、`tables` 和 `ocr` extras；核心包只保留配置、LangChain 核心与切块协议所需依赖。
+
+## 验证
+
+```bash
+python -m pytest -q
+ruff check .
+ruff format --check .
+mypy src
+```
+
+可跟踪实施计划见 [docs/tasks.md](docs/tasks.md)。
