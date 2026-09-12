@@ -7,10 +7,20 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from offline_rag.cli import _parse_filters, build_parser, main
+from corpuscore.cli import _configure_utf8_output, _parse_filters, build_parser, main
 
 
 class CliTests(unittest.TestCase):
+    def test_cli_reconfigures_legacy_windows_output_as_utf8(self) -> None:
+        raw = io.BytesIO()
+        stream = io.TextIOWrapper(raw, encoding="ascii")
+
+        _configure_utf8_output(stream)
+        stream.write("Unicode minus: −")
+        stream.flush()
+
+        self.assertEqual(raw.getvalue(), "Unicode minus: −".encode())
+
     def test_query_override_flags_and_filter_parsing(self) -> None:
         args = build_parser().parse_args(
             [
@@ -47,7 +57,7 @@ class CliTests(unittest.TestCase):
             exit_code = main([])
 
         self.assertEqual(exit_code, 0)
-        self.assertIn("rag-index", output.getvalue())
+        self.assertIn("corpus-index", output.getvalue())
 
     def test_init_creates_config_and_expected_directories(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -57,7 +67,7 @@ class CliTests(unittest.TestCase):
                 exit_code = main(["init", str(target)])
 
             self.assertEqual(exit_code, 0)
-            self.assertTrue((target / "rag.yaml").is_file())
+            self.assertTrue((target / "corpus.yaml").is_file())
             self.assertTrue((target / "data").is_dir())
             self.assertTrue((target / "documents").is_dir())
             self.assertTrue((target / "models").is_dir())
@@ -80,7 +90,7 @@ class CliTests(unittest.TestCase):
 
     def test_doctor_fails_when_local_model_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            config = Path(directory) / "rag.yaml"
+            config = Path(directory) / "corpus.yaml"
             config.write_text("embedding:\n  model_path: ./missing-model\n", encoding="utf-8")
             output = io.StringIO()
             with contextlib.redirect_stdout(output):

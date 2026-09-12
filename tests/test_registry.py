@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from offline_rag.exceptions import RegistryError
-from offline_rag.registry import ComponentRegistry
+from corpuscore.exceptions import RegistryError
+from corpuscore.registry import ComponentRegistry
 
 
 class ComponentRegistryTests(unittest.TestCase):

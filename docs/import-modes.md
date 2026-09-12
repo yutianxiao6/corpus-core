@@ -16,7 +16,7 @@ documents:
 
 将 Manifest 文件作为 `preview` 或 `build` 的唯一输入即可。路径和 glob 相对 Manifest 所在目录解析，同一个 source 重复出现会报错。
 
-单文件 sidecar 命名为 `filename.ext.rag.yaml`：
+单文件 sidecar 命名为 `filename.ext.corpus.yaml`：
 
 ```yaml
 version: 1

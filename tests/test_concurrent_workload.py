@@ -5,15 +5,15 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from offline_rag.contracts.chunks import Chunk
-from offline_rag.contracts.indexing import (
+from corpuscore.contracts.chunks import Chunk
+from corpuscore.contracts.indexing import (
     DistanceMetric,
     EmbeddingSpecification,
     IndexSpecification,
     VectorRecord,
 )
-from offline_rag.contracts.retrieval import SearchRequest
-from offline_rag.vectorstores import QdrantLocalVectorStore, chunk_to_payload
+from corpuscore.contracts.retrieval import SearchRequest
+from corpuscore.vectorstores import QdrantLocalVectorStore, chunk_to_payload
 
 
 def _specification() -> IndexSpecification:

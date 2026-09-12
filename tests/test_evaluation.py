@@ -5,15 +5,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from offline_rag.contracts.chunks import Chunk
-from offline_rag.contracts.retrieval import RetrievalCandidate
-from offline_rag.evaluation import (
+from corpuscore.contracts.chunks import Chunk
+from corpuscore.contracts.retrieval import RetrievalCandidate
+from corpuscore.evaluation import (
     RetrievalEvaluator,
     RetrievalExample,
     assert_thresholds,
     load_examples,
 )
-from offline_rag.exceptions import EvaluationRegressionError
+from corpuscore.exceptions import EvaluationRegressionError
 
 
 def result(identifier: str) -> RetrievalCandidate:

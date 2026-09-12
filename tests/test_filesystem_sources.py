@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from offline_rag.exceptions import SourceDiscoveryError
-from offline_rag.sources import DiscoveryOptions, FileSystemSourceProvider
+from corpuscore.exceptions import SourceDiscoveryError
+from corpuscore.sources import DiscoveryOptions, FileSystemSourceProvider
 
 
 class FileSystemSourceProviderTests(unittest.TestCase):

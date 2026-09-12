@@ -5,9 +5,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from offline_rag.concurrency import AsyncMicroBatcher, QueuedEmbeddingProvider
-from offline_rag.embeddings import QwenSentenceTransformerEmbedding
-from offline_rag.exceptions import EmbeddingError, OfflineResourceMissingError
+from corpuscore.concurrency import AsyncMicroBatcher, QueuedEmbeddingProvider
+from corpuscore.embeddings import QwenSentenceTransformerEmbedding
+from corpuscore.exceptions import EmbeddingError, LocalResourceMissingError
 
 
 class FakeSentenceModel:
@@ -77,11 +77,11 @@ class EmbeddingAdapterTests(unittest.TestCase):
     def test_missing_or_empty_local_model_is_rejected_without_download(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             missing = Path(directory) / "missing"
-            with self.assertRaises(OfflineResourceMissingError):
+            with self.assertRaises(LocalResourceMissingError):
                 QwenSentenceTransformerEmbedding(missing)
             empty = Path(directory) / "empty"
             empty.mkdir()
-            with self.assertRaisesRegex(OfflineResourceMissingError, "empty"):
+            with self.assertRaisesRegex(LocalResourceMissingError, "empty"):
                 QwenSentenceTransformerEmbedding(empty)
 
     def test_non_finite_vectors_are_rejected(self) -> None:

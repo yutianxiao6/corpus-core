@@ -8,11 +8,11 @@ from collections.abc import Sequence
 from pathlib import Path
 from unittest.mock import patch
 
-from offline_rag.concurrency import AsyncMicroBatcher, QueuedReranker
-from offline_rag.contracts.chunks import Chunk
-from offline_rag.contracts.retrieval import RetrievalCandidate
-from offline_rag.exceptions import OfflineResourceMissingError, RerankerError
-from offline_rag.rerankers import QwenCrossEncoderReranker
+from corpuscore.concurrency import AsyncMicroBatcher, QueuedReranker
+from corpuscore.contracts.chunks import Chunk
+from corpuscore.contracts.retrieval import RetrievalCandidate
+from corpuscore.exceptions import LocalResourceMissingError, RerankerError
+from corpuscore.rerankers import QwenCrossEncoderReranker
 
 
 def candidate(chunk_id: str, score: float) -> RetrievalCandidate:
@@ -140,8 +140,8 @@ class RerankerTests(unittest.IsolatedAsyncioTestCase):
                 reranker.rerank("query", [candidate("a", 1)])
 
     async def test_missing_local_model_fails_without_loading(self) -> None:
-        missing = Path(tempfile.gettempdir()) / "offline-rag-definitely-missing-reranker"
-        with self.assertRaises(OfflineResourceMissingError):
+        missing = Path(tempfile.gettempdir()) / "corpuscore-definitely-missing-reranker"
+        with self.assertRaises(LocalResourceMissingError):
             QwenCrossEncoderReranker(missing)
 
     async def test_model_loader_is_forced_offline(self) -> None:

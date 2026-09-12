@@ -4,11 +4,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from offline_rag.contracts.documents import ContentBlockType, LoadedContent
-from offline_rag.exceptions import DocumentParseError
-from offline_rag.loaders import MarkdownLoader
-from offline_rag.parsers import MarkdownParser
-from offline_rag.sources import FileSystemSourceProvider
+from corpuscore.contracts.documents import ContentBlockType, LoadedContent
+from corpuscore.exceptions import DocumentParseError
+from corpuscore.loaders import MarkdownLoader
+from corpuscore.parsers import MarkdownParser
+from corpuscore.sources import FileSystemSourceProvider
 
 
 class MarkdownTests(unittest.TestCase):

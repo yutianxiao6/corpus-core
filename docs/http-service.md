@@ -3,23 +3,23 @@
 HTTP 层是对 Python 检索接口的薄封装，不复制检索逻辑，也不负责答案生成。安装可选依赖：
 
 ```bash
-pip install 'offline-rag-retriever[http]'
+pip install 'corpuscore[http]'
 ```
 
 仅监听本机时可以直接启动：
 
 ```bash
-rag-index --config rag.yaml serve --host 127.0.0.1 --port 8000
+corpus-index --config corpus.yaml serve --host 127.0.0.1 --port 8000
 ```
 
 绑定内网地址必须通过环境变量启用 Bearer token：
 
 ```bash
-export OFFLINE_RAG_HTTP_TOKEN='replace-with-a-long-random-secret'
-rag-index --config rag.yaml serve \
+export CORPUSCORE_HTTP_TOKEN='replace-with-a-long-random-secret'
+corpus-index --config corpus.yaml serve \
   --host 0.0.0.0 \
   --port 8000 \
-  --bearer-token-env OFFLINE_RAG_HTTP_TOKEN
+  --bearer-token-env CORPUSCORE_HTTP_TOKEN
 ```
 
 除 `/health/live` 外，请求需要 `Authorization: Bearer ...`。适配器默认关闭 Swagger/ReDoc、CORS 和 access log，不会记录查询正文；生产环境仍应在内网反向代理完成 TLS、IP 白名单、限流、token 轮换及审计。
@@ -50,14 +50,14 @@ rag-index --config rag.yaml serve \
 公司可以直接复用应用工厂：
 
 ```python
-from offline_rag.config import load_config
-from offline_rag.http_service import create_app
+from corpuscore.config import load_config
+from corpuscore.http_service import create_app
 
 app = create_app(
-    load_config("rag.yaml"),
-    bearer_token_env="OFFLINE_RAG_HTTP_TOKEN",
+    load_config("corpus.yaml"),
+    bearer_token_env="CORPUSCORE_HTTP_TOKEN",
     maximum_batch_size=32,
 )
 ```
 
-应用生命周期内只创建一个 `OfflineRagEngine`，关闭时异步释放模型队列、journal 和 Qdrant client。多进程部署必须使用 Qdrant Server；每个 worker 会各自加载 embedding/reranker 模型，因此 worker 数要按显存和内存规划。Qdrant Local 只能用于单进程。
+应用生命周期内只创建一个 `RetrievalEngine`，关闭时异步释放模型队列、journal 和 Qdrant client。多进程部署必须使用 Qdrant Server；每个 worker 会各自加载 embedding/reranker 模型，因此 worker 数要按显存和内存规划。Qdrant Local 只能用于单进程。

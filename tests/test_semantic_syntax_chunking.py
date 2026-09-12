@@ -4,15 +4,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from offline_rag.chunkers import RecursiveChunker, SemanticChunker, SyntaxChunker
-from offline_rag.config.models import RagConfig, SemanticChunkProfile
-from offline_rag.contracts.documents import (
+from corpuscore.chunkers import RecursiveChunker, SemanticChunker, SyntaxChunker
+from corpuscore.config.models import CorpusConfig, SemanticChunkProfile
+from corpuscore.contracts.documents import (
     ContentBlock,
     ContentBlockType,
     ParsedDocument,
     SourceDescriptor,
 )
-from offline_rag.ingestion import IngestionService
+from corpuscore.ingestion import IngestionService
 
 
 def parsed_document(blocks: list[ContentBlock], *, language: str | None = None) -> ParsedDocument:
@@ -71,7 +71,7 @@ class SyntaxChunkingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "service.py"
             path.write_text("def answer():\n    return 42\n", encoding="utf-8")
-            report = IngestionService(RagConfig()).preview([path])
+            report = IngestionService(CorpusConfig()).preview([path])
 
         self.assertEqual(len(report.items), 1)
         item = report.items[0]
@@ -114,7 +114,7 @@ class SemanticChunkingTests(unittest.TestCase):
             def embed_documents(self, texts):  # type: ignore[no-untyped-def]
                 return tuple((1.0, 0.0) if "服务器" in text else (0.0, 1.0) for text in texts)
 
-        config = RagConfig(
+        config = CorpusConfig(
             chunk_profiles={
                 "default": SemanticChunkProfile(
                     type="semantic",

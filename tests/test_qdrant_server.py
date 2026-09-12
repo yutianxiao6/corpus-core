@@ -6,15 +6,15 @@ from unittest.mock import AsyncMock, patch
 from qdrant_client import AsyncQdrantClient, QdrantClient
 from qdrant_client.http import models
 
-from offline_rag.contracts.chunks import Chunk
-from offline_rag.contracts.indexing import (
+from corpuscore.contracts.chunks import Chunk
+from corpuscore.contracts.indexing import (
     DistanceMetric,
     EmbeddingSpecification,
     IndexSpecification,
     VectorRecord,
 )
-from offline_rag.contracts.retrieval import SearchRequest
-from offline_rag.vectorstores import QdrantServerVectorStore, chunk_to_payload
+from corpuscore.contracts.retrieval import SearchRequest
+from corpuscore.vectorstores import QdrantServerVectorStore, chunk_to_payload
 
 
 def specification() -> IndexSpecification:
@@ -72,8 +72,8 @@ class QdrantServerTests(unittest.TestCase):
 
     def test_client_configuration_disables_cloud_inference(self) -> None:
         with (
-            patch("offline_rag.vectorstores.qdrant_server.QdrantClient") as factory,
-            patch("offline_rag.vectorstores.qdrant_server.AsyncQdrantClient") as async_factory,
+            patch("corpuscore.vectorstores.qdrant_server.QdrantClient") as factory,
+            patch("corpuscore.vectorstores.qdrant_server.AsyncQdrantClient") as async_factory,
         ):
             async_factory.return_value.close = AsyncMock()
             store = QdrantServerVectorStore(

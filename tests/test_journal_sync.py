@@ -4,9 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from offline_rag.contracts.documents import SourceDescriptor
-from offline_rag.contracts.indexing import IngestionStage
-from offline_rag.indexing import IngestionJournal, plan_sync
+from corpuscore.contracts.documents import SourceDescriptor
+from corpuscore.contracts.indexing import IngestionStage
+from corpuscore.indexing import IngestionJournal, plan_sync
 
 
 def source(identifier: str, content_hash: str) -> SourceDescriptor:

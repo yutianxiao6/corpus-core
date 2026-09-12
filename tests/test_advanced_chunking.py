@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import unittest
 
-from offline_rag.chunkers import (
+from corpuscore.chunkers import (
     ChunkFinalizer,
     PageAwareChunker,
     ParagraphPackingChunker,
     ParentChildChunker,
     TableRowChunker,
 )
-from offline_rag.contracts.documents import (
+from corpuscore.contracts.documents import (
     ContentBlock,
     ContentBlockType,
     ParsedDocument,

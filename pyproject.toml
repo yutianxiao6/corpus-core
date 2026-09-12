@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "offline-rag-retriever"
+name = "corpuscore"
 version = "0.1.0.dev0"
-description = "Configurable offline retrieval core for RAG systems"
+description = "Embeddable document ingestion and hybrid retrieval engine for private knowledge systems"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "LicenseRef-Proprietary"
@@ -19,7 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 qdrant = ["langchain-qdrant>=1.0", "qdrant-client>=1.10"]
-embedding = ["langchain-huggingface>=1.0", "sentence-transformers>=5.0"]
+embedding = ["langchain-huggingface>=1.0", "sentence-transformers>=5.0", "torch>=2.14.0"]
 documents = [
     "beautifulsoup4>=4.12",
     "charset-normalizer>=3.3",
@@ -44,10 +44,20 @@ dev = [
 ]
 
 [project.scripts]
-rag-index = "offline_rag.cli:main"
+corpus-index = "corpuscore.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu130", marker = "sys_platform == 'win32'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

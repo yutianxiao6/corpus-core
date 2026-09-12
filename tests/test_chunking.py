@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from offline_rag.chunkers import (
+from corpuscore.chunkers import (
     ChunkDeduplicator,
     ChunkFinalizer,
     ChunkSizeProcessor,
@@ -10,14 +10,14 @@ from offline_rag.chunkers import (
     HeadingRecursiveChunker,
     RecursiveChunker,
 )
-from offline_rag.contracts.chunks import ChunkDraft
-from offline_rag.contracts.documents import (
+from corpuscore.contracts.chunks import ChunkDraft
+from corpuscore.contracts.documents import (
     ContentBlock,
     ContentBlockType,
     ParsedDocument,
     SourceDescriptor,
 )
-from offline_rag.exceptions import ChunkingError
+from corpuscore.exceptions import ChunkingError
 
 
 def make_document(blocks: list[ContentBlock], *, document_id: str = "doc-v1") -> ParsedDocument:

@@ -3,7 +3,7 @@
 `FileSystemSourceProvider` 接受目录、显式文件和 glob。每个 `SourceDescriptor` 包含 SHA-256 内容摘要、UTC 修改时间、大小、规范化相对路径和稳定 source ID。
 
 ```python
-from offline_rag.sources import DiscoveryOptions, FileSystemSourceProvider
+from corpuscore.sources import DiscoveryOptions, FileSystemSourceProvider
 
 provider = FileSystemSourceProvider(
     ["./documents"],

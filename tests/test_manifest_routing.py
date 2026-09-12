@@ -4,18 +4,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from offline_rag.config.models import (
+from corpuscore.config.models import (
+    CorpusConfig,
     HeadingRecursiveChunkProfile,
-    RagConfig,
     RecursiveChunkProfile,
     RouteMatch,
     RoutingRule,
 )
-from offline_rag.contracts.documents import SourceDescriptor
-from offline_rag.exceptions import ConfigurationError
-from offline_rag.ingestion import IngestionService
-from offline_rag.sources import DiscoveryOptions, ManifestSourceProvider, apply_sidecar
-from offline_rag.sources.filesystem import FileSystemSourceProvider
+from corpuscore.contracts.documents import SourceDescriptor
+from corpuscore.exceptions import ConfigurationError
+from corpuscore.ingestion import IngestionService
+from corpuscore.sources import DiscoveryOptions, ManifestSourceProvider, apply_sidecar
+from corpuscore.sources.filesystem import FileSystemSourceProvider
 
 
 def profiles():  # type: ignore[no-untyped-def]
@@ -59,7 +59,7 @@ documents:
             )
 
         self.assertEqual([item.relative_path for item in sources], ["docs/one.txt", "docs/two.txt"])
-        self.assertEqual(sources[0].metadata["rag_profile"], "markdown_heading")
+        self.assertEqual(sources[0].metadata["corpus_profile"], "markdown_heading")
         self.assertEqual(sources[0].metadata["department"], "engineering")
         self.assertNotEqual(sources[0].source_id, sources[1].source_id)
 
@@ -86,7 +86,7 @@ documents:
 
 class SidecarAndRoutingTests(unittest.TestCase):
     def test_structured_formats_use_specialized_default_profiles(self) -> None:
-        service = IngestionService(RagConfig())
+        service = IngestionService(CorpusConfig())
         expectations = {
             "report.xlsx": "table_rows",
             "data.csv": "table_rows",
@@ -110,14 +110,14 @@ class SidecarAndRoutingTests(unittest.TestCase):
             root = Path(directory)
             document = root / "manual.txt"
             document.write_text("manual", encoding="utf-8")
-            (root / "manual.txt.rag.yaml").write_text(
+            (root / "manual.txt.corpus.yaml").write_text(
                 "profile: markdown_heading\nmetadata:\n  department: support\n",
                 encoding="utf-8",
             )
             source = next(iter(FileSystemSourceProvider([document]).discover()))
             configured = apply_sidecar(source)
 
-        self.assertEqual(configured.metadata["rag_profile"], "markdown_heading")
+        self.assertEqual(configured.metadata["corpus_profile"], "markdown_heading")
         self.assertEqual(configured.metadata["department"], "support")
 
     def test_sidecar_profile_overrides_routing(self) -> None:
@@ -125,10 +125,10 @@ class SidecarAndRoutingTests(unittest.TestCase):
             root = Path(directory)
             document = root / "manual.txt"
             document.write_text("manual", encoding="utf-8")
-            (root / "manual.txt.rag.yaml").write_text(
+            (root / "manual.txt.corpus.yaml").write_text(
                 "profile: markdown_heading\n", encoding="utf-8"
             )
-            config = RagConfig(
+            config = CorpusConfig(
                 chunk_profiles=profiles(),
                 routing=(RoutingRule(match=RouteMatch(extensions=(".txt",)), use="default"),),
             )
@@ -143,7 +143,7 @@ class SidecarAndRoutingTests(unittest.TestCase):
             department.mkdir()
             document = department / "faq.txt"
             document.write_text("frequently asked", encoding="utf-8")
-            config = RagConfig(
+            config = CorpusConfig(
                 chunk_profiles=profiles(),
                 routing=(
                     RoutingRule(

@@ -3,14 +3,15 @@ from __future__ import annotations
 import unittest
 from dataclasses import FrozenInstanceError
 
-from offline_rag.contracts.chunks import Chunk, ChunkDraft
-from offline_rag.contracts.documents import (
+from corpuscore import CorpusConfig, CorpusCoreError, RetrievalEngine, load_config
+from corpuscore.contracts.chunks import Chunk, ChunkDraft
+from corpuscore.contracts.documents import (
     ContentBlock,
     ContentBlockType,
     ParsedDocument,
     SourceDescriptor,
 )
-from offline_rag.contracts.indexing import (
+from corpuscore.contracts.indexing import (
     DistanceMetric,
     EmbeddingSpecification,
     IndexSpecification,
@@ -19,7 +20,7 @@ from offline_rag.contracts.indexing import (
     IngestionStage,
     ItemFailure,
 )
-from offline_rag.contracts.retrieval import (
+from corpuscore.contracts.retrieval import (
     ContextBudget,
     QueryOverrides,
     RetrievalOptions,
@@ -34,6 +35,14 @@ def make_source() -> SourceDescriptor:
         content_hash="abc123",
         metadata={"labels": ["manual", "zh"]},
     )
+
+
+class PublicApiTests(unittest.TestCase):
+    def test_top_level_library_api_exposes_primary_entry_points(self) -> None:
+        self.assertEqual(RetrievalEngine.__name__, "RetrievalEngine")
+        self.assertEqual(CorpusConfig.__name__, "CorpusConfig")
+        self.assertTrue(issubclass(CorpusCoreError, Exception))
+        self.assertTrue(callable(load_config))
 
 
 class DocumentContractTests(unittest.TestCase):

@@ -22,5 +22,5 @@ benchmark_corpus/
 *.before-*
 
 # Local configuration may contain deployment-specific secrets or paths.
-rag.local.yaml
+corpus.local.yaml
 .env

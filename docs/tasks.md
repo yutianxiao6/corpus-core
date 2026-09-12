@@ -1,4 +1,4 @@
-# Offline RAG Retriever 任务清单
+# CorpusCore 任务清单
 
 更新日期：2026-09-11
 
@@ -26,10 +26,10 @@
   - 验收：覆盖边界、协议、导入、切块、索引、查询、组织、并发、离线和评测。
 - [x] `P0-003` 建立 `src` 布局和 Python 包元数据。
   - 依赖：P0-001。
-  - 验收：Python 3.11+ 可导入 `offline_rag`，包元数据与 CLI 入口明确。
+  - 验收：Python 3.11+ 可导入 `corpuscore`，包元数据与 CLI 入口明确。
 - [x] `P0-004` 实现异常层级。
   - 依赖：P0-003。
-  - 验收：公共异常继承 `OfflineRagError`，错误具有稳定 code 和安全 message。
+  - 验收：公共异常继承 `CorpusCoreError`，错误具有稳定 code 和安全 message。
 - [x] `P0-005` 实现核心文档与 Chunk 数据协议。
   - 依赖：P0-003。
   - 验收：Source、ContentBlock、ParsedDocument、Chunk、ChunkDraft 可校验且不可意外修改。
@@ -76,7 +76,7 @@
 - [x] `P1-015` 实现 dense similarity 查询策略。
 - [x] `P1-016` 实现 FlatOrganizer。
 - [x] `P1-017` 实现 ContextOrganizer 和引用映射。
-- [x] `P1-018` 实现 `rag-index preview/build/query/doctor`。
+- [x] `P1-018` 实现 `corpus-index preview/build/query/doctor`。
 - [x] `P1-019` 完成 TXT/Markdown 端到端离线测试。
 - [x] `P1-020` 建立最小检索评测 fixture 和 Recall@K。
 

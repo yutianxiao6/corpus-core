@@ -1,12 +1,12 @@
-# Offline RAG Retriever
+# CorpusCore
 
-Offline RAG Retriever 是一个面向本地部署的通用 Python 检索组件。它负责文档发现、解析、切块、向量化、索引维护、检索、重排和上下文组织；上层问答系统只需要调用检索接口并接入自己的 LLM。
+CorpusCore 是一个可嵌入业务系统、也可独立部署的 Python 文档索引与混合检索引擎。它负责文档发现、解析、切块、向量化、索引维护、检索、重排和上下文组织；上层应用可以直接使用 Python SDK、LangChain Retriever 或可选 HTTP 服务，并接入自己的 LLM。
 
 当前已经完成全部 P0/P1/P2/P3：多格式解析及多策略切块、可恢复增量索引、Qdrant staging/alias 回滚、dense/sparse/hybrid 检索、本地 Qwen3 rerank、多种上下文组织方式、Qdrant Server、异步/批量 API、模型微批队列、压力测试、评测门槛、索引备份恢复、离线交付 bundle、Office/OCR、代码 AST、实验性语义切块及可选 HTTP 查询适配器均可使用。
 
 ## 已确定的边界
 
-- 完全离线运行。
+- 离线优先，不依赖外部云服务，也支持内网 Qdrant Server。
 - 中英文混合检索。
 - 单部署实例、单知识库，不实现多租户平台。
 - 不按业务领域划分索引，但允许按文档结构选择解析和切块方式。
@@ -57,14 +57,25 @@ python -m pytest -q tests/test_concurrent_workload.py
 
 文件发现、TXT/Markdown 加载与安全规则见 [docs/ingestion.md](docs/ingestion.md)。
 
+## Python SDK 快速开始
+
+```python
+from corpuscore import RetrievalEngine
+
+with RetrievalEngine.from_yaml("corpus.yaml") as engine:
+    result = engine.retrieve("合同的付款条件是什么？", profile="balanced")
+    for hit in result.hits:
+        print(hit.rank, hit.chunk.content)
+```
+
 ## CLI 快速开始
 
 ```bash
-rag-index init ./my-rag
-rag-index preview ./documents --show-content
-rag-index --config rag.yaml build ./documents --json
-rag-index --config rag.yaml query "如何离线安装？" --profile fast --json
-rag-index --config rag.yaml query "ERR-1042" --profile balanced --filter metadata.department=support --json
+corpus-index init ./my-corpus
+corpus-index preview ./documents --show-content
+corpus-index --config corpus.yaml build ./documents --json
+corpus-index --config corpus.yaml query "如何离线安装？" --profile fast --json
+corpus-index --config corpus.yaml query "ERR-1042" --profile balanced --filter metadata.department=support --json
 ```
 
 `build` 和 `query` 只读取配置指定的本地模型，不会自动下载。Python 查询接口、Qdrant Local 限制和引用结果见 [docs/querying.md](docs/querying.md)。

@@ -3,15 +3,15 @@ from __future__ import annotations
 import unittest
 from dataclasses import replace
 
-from offline_rag.config.models import RagConfig, RouteMatch, RoutingRule
-from offline_rag.contracts.indexing import (
+from corpuscore.config.models import CorpusConfig, RouteMatch, RoutingRule
+from corpuscore.contracts.indexing import (
     DistanceMetric,
     EmbeddingSpecification,
     IndexSpecification,
 )
-from offline_rag.exceptions import IndexCompatibilityError
-from offline_rag.indexing import assert_index_compatible, compare_index_specs
-from offline_rag.ingestion import build_index_specification
+from corpuscore.exceptions import IndexCompatibilityError
+from corpuscore.indexing import assert_index_compatible, compare_index_specs
+from corpuscore.ingestion import build_index_specification
 
 
 def make_specification() -> IndexSpecification:
@@ -42,9 +42,9 @@ def make_specification() -> IndexSpecification:
 class IndexCompatibilityTests(unittest.TestCase):
     def test_routing_changes_are_part_of_index_fingerprint(self) -> None:
         embedding = make_specification().embedding
-        first = build_index_specification(RagConfig(), embedding)
+        first = build_index_specification(CorpusConfig(), embedding)
         second = build_index_specification(
-            RagConfig(
+            CorpusConfig(
                 routing=(
                     RoutingRule(
                         match=RouteMatch(extensions=(".txt",)),

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from offline_rag.normalization import normalize_text
+from corpuscore.normalization import normalize_text
 
 
 class NormalizationTests(unittest.TestCase):

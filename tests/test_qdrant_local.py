@@ -5,17 +5,17 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from offline_rag.contracts.chunks import Chunk
-from offline_rag.contracts.indexing import (
+from corpuscore.contracts.chunks import Chunk
+from corpuscore.contracts.indexing import (
     DistanceMetric,
     EmbeddingSpecification,
     IndexSpecification,
     SparseEmbeddingSpecification,
     VectorRecord,
 )
-from offline_rag.contracts.retrieval import SearchRequest, SearchVector
-from offline_rag.exceptions import IndexCompatibilityError
-from offline_rag.vectorstores import QdrantLocalVectorStore, chunk_to_payload
+from corpuscore.contracts.retrieval import SearchRequest, SearchVector
+from corpuscore.exceptions import IndexCompatibilityError
+from corpuscore.vectorstores import QdrantLocalVectorStore, chunk_to_payload
 
 
 def make_index_specification() -> IndexSpecification:

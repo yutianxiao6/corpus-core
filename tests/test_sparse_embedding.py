@@ -3,8 +3,8 @@ from __future__ import annotations
 import math
 import unittest
 
-from offline_rag.embeddings import HashedLexicalSparseEmbedding
-from offline_rag.exceptions import EmbeddingError
+from corpuscore.embeddings import HashedLexicalSparseEmbedding
+from corpuscore.exceptions import EmbeddingError
 
 
 class SparseEmbeddingTests(unittest.IsolatedAsyncioTestCase):

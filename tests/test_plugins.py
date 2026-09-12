@@ -3,9 +3,9 @@ from __future__ import annotations
 import unittest
 from dataclasses import dataclass
 
-from offline_rag.exceptions import RegistryError
-from offline_rag.plugins import PLUGIN_GROUPS, PluginManager
-from offline_rag.registry import ComponentRegistry
+from corpuscore.exceptions import RegistryError
+from corpuscore.plugins import PLUGIN_GROUPS, PluginManager
+from corpuscore.registry import ComponentRegistry
 
 
 @dataclass

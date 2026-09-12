@@ -5,10 +5,10 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from offline_rag.contracts.documents import SourceDescriptor
-from offline_rag.exceptions import DocumentLoadError
-from offline_rag.loaders import TextLoader
-from offline_rag.sources import FileSystemSourceProvider
+from corpuscore.contracts.documents import SourceDescriptor
+from corpuscore.exceptions import DocumentLoadError
+from corpuscore.loaders import TextLoader
+from corpuscore.sources import FileSystemSourceProvider
 
 
 class TextLoaderTests(unittest.TestCase):

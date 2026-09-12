@@ -4,9 +4,9 @@
 
 ```bash
 uv build
-python scripts/build_offline_bundle.py ./offline-rag-bundle \
-  --wheel dist/offline_rag_retriever-0.1.0.dev0-py3-none-any.whl \
-  --wheel dist/offline_rag_retriever-0.1.0.dev0.tar.gz \
+python scripts/build_offline_bundle.py ./corpuscore-bundle \
+  --wheel dist/corpuscore-0.1.0.dev0-py3-none-any.whl \
+  --wheel dist/corpuscore-0.1.0.dev0.tar.gz \
   --model ./models/Qwen3-Embedding-0.6B \
   --model ./models/Qwen3-Reranker-0.6B
 ```
@@ -15,7 +15,7 @@ python scripts/build_offline_bundle.py ./offline-rag-bundle \
 
 ```bash
 sha256sum -c checksums.sha256
-python -m pip install --no-index --find-links wheelhouse offline-rag-retriever
+python -m pip install --no-index --find-links wheelhouse corpuscore
 ```
 
 `--force` 才会替换已有非空输出目录。模型 bundle 必须与配置中的模型路径、revision 和索引 fingerprint 一起交付；升级时重新生成清单并在断网环境验证安装、`doctor`、固定评测集和索引恢复。

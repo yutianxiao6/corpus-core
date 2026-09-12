@@ -4,17 +4,17 @@ import unittest
 from collections.abc import Sequence
 from typing import ClassVar
 
-from offline_rag.contracts.chunks import Chunk
-from offline_rag.contracts.indexing import EmbeddingSpecification
-from offline_rag.contracts.retrieval import RetrievalCandidate, SearchHit
-from offline_rag.ports import Vector
-from offline_rag.retrieval import (
+from corpuscore.contracts.chunks import Chunk
+from corpuscore.contracts.indexing import EmbeddingSpecification
+from corpuscore.contracts.retrieval import RetrievalCandidate, SearchHit
+from corpuscore.ports import Vector
+from corpuscore.retrieval import (
     MaximalMarginalRelevanceSelector,
     NeighborExpander,
     limit_per_document,
     score_threshold_filter,
 )
-from offline_rag.vectorstores import chunk_to_payload
+from corpuscore.vectorstores import chunk_to_payload
 
 
 def make_candidate(

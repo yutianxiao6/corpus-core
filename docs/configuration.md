@@ -7,10 +7,10 @@
 生效顺序从低到高为：内置默认值、YAML 文件、CLI 覆盖、Python API 覆盖。映射递归合并，列表和标量整体替换。
 
 ```python
-from offline_rag.config import load_config, parse_cli_overrides
+from corpuscore.config import load_config, parse_cli_overrides
 
 config = load_config(
-    "rag.yaml",
+    "corpus.yaml",
     cli_overrides=parse_cli_overrides(["embedding.batch_size=32"]),
     api_overrides={"runtime": {"log_level": "DEBUG"}},
 )
@@ -18,11 +18,11 @@ config = load_config(
 
 YAML 使用安全加载器，重复 key、未知字段、不支持的版本和不存在的 profile 引用都会抛出 `ConfigurationError`。
 
-配置中的本地相对路径以 `rag.yaml` 所在目录为基准，而不是运行命令时的当前目录。适用字段包括 runtime work/cache 目录、embedding 模型、Qdrant Local 数据目录和 reranker 模型目录。
+配置中的本地相对路径以 `corpus.yaml` 所在目录为基准，而不是运行命令时的当前目录。适用字段包括 runtime work/cache 目录、embedding 模型、Qdrant Local 数据目录和 reranker 模型目录。
 
 模型内容固定后，可把一次完整校验得到的 SHA-256 写入 `embedding.model_checksum`。之后启动会直接使用这个不可变指纹，避免每个短生命周期 CLI 进程重新读取整个模型目录；该字段必须是 64 位十六进制字符串，模型文件变化后必须同步更新。未配置时仍会完整计算，保持安全默认值。
 
-Query profile 是经过启动期校验的默认参数集合。Python `engine.retrieve(...)` 和 CLI `rag-index query` 可以逐调用覆盖 filters、organizer、final_k、score threshold、rerank 候选数、MMR、每文档上限及邻居距离；不能覆盖 embedding、sparse 编码、parser/chunker 或向量库等索引结构参数。
+Query profile 是经过启动期校验的默认参数集合。Python `engine.retrieve(...)` 和 CLI `corpus-index query` 可以逐调用覆盖 filters、organizer、final_k、score threshold、rerank 候选数、MMR、每文档上限及邻居距离；不能覆盖 embedding、sparse 编码、parser/chunker 或向量库等索引结构参数。
 
 完整字段示例见 [设计文档](design.md#112-完整配置示例)。
 
@@ -222,7 +222,7 @@ vector_store:
   mode: server
   path: null
   url: http://qdrant.internal:6333
-  api_key_env: OFFLINE_RAG_QDRANT_API_KEY
+  api_key_env: CORPUSCORE_QDRANT_API_KEY
   prefer_grpc: true
   timeout_seconds: 30
   pool_size: 20

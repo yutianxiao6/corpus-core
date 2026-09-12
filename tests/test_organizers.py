@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import unittest
 
-from offline_rag.contracts.chunks import Chunk
-from offline_rag.contracts.retrieval import ContextBudget, RetrievalCandidate
-from offline_rag.organizers import (
+from corpuscore.contracts.chunks import Chunk
+from corpuscore.contracts.retrieval import ContextBudget, RetrievalCandidate
+from corpuscore.organizers import (
     ContextOrganizer,
     DebugOrganizer,
     DiverseOrganizer,

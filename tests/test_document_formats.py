@@ -8,11 +8,11 @@ from unittest.mock import patch
 
 from docx import Document
 
-from offline_rag.contracts.documents import ContentBlockType
-from offline_rag.exceptions import DocumentLoadError, DocumentParseError
-from offline_rag.loaders import BinaryFileLoader, DocxLoader, PdfLoader, TextLoader
-from offline_rag.parsers import DocxParser, HtmlParser, PdfParser, StructuredTextParser
-from offline_rag.sources import FileSystemSourceProvider
+from corpuscore.contracts.documents import ContentBlockType
+from corpuscore.exceptions import DocumentLoadError, DocumentParseError
+from corpuscore.loaders import BinaryFileLoader, DocxLoader, PdfLoader, TextLoader
+from corpuscore.parsers import DocxParser, HtmlParser, PdfParser, StructuredTextParser
+from corpuscore.sources import FileSystemSourceProvider
 
 
 def source_for(path: Path):  # type: ignore[no-untyped-def]
@@ -56,7 +56,7 @@ class PdfParserTests(unittest.TestCase):
             path = Path(directory) / "manual.pdf"
             path.write_bytes(b"fixture")
             loaded = PdfLoader().load(source_for(path))
-            with patch("offline_rag.parsers.pdf.PdfReader", return_value=fake_reader):
+            with patch("corpuscore.parsers.pdf.PdfReader", return_value=fake_reader):
                 document = PdfParser().parse(loaded)
 
         content_blocks = [
@@ -79,7 +79,7 @@ class PdfParserTests(unittest.TestCase):
             path.write_bytes(b"fixture")
             loaded = PdfLoader().load(source_for(path))
             with (
-                patch("offline_rag.parsers.pdf.PdfReader", return_value=fake_reader),
+                patch("corpuscore.parsers.pdf.PdfReader", return_value=fake_reader),
                 self.assertRaisesRegex(DocumentParseError, "OCR"),
             ):
                 PdfParser().parse(loaded)

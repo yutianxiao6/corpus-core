@@ -5,23 +5,23 @@ import unittest
 from collections.abc import Sequence
 from pathlib import Path
 
-from offline_rag.config.models import (
+from corpuscore.config.models import (
+    CorpusConfig,
     EmbeddingConfig,
     HeadingRecursiveChunkProfile,
     IngestionConfig,
-    RagConfig,
     RecursiveChunkProfile,
     SparseEmbeddingConfig,
     VectorStoreConfig,
 )
-from offline_rag.contracts.indexing import DistanceMetric, EmbeddingSpecification
-from offline_rag.contracts.retrieval import RetrievalOptions, RetrievalRequest
-from offline_rag.embeddings import HashedLexicalSparseEmbedding
-from offline_rag.indexing import IngestionJournal
-from offline_rag.ingestion import IngestionService, build_index_specification
-from offline_rag.ports import Vector
-from offline_rag.retrieval import DenseSimilarityStrategy, HybridRetrievalStrategy
-from offline_rag.vectorstores import QdrantLocalVectorStore
+from corpuscore.contracts.indexing import DistanceMetric, EmbeddingSpecification
+from corpuscore.contracts.retrieval import RetrievalOptions, RetrievalRequest
+from corpuscore.embeddings import HashedLexicalSparseEmbedding
+from corpuscore.indexing import IngestionJournal
+from corpuscore.ingestion import IngestionService, build_index_specification
+from corpuscore.ports import Vector
+from corpuscore.retrieval import DenseSimilarityStrategy, HybridRetrievalStrategy
+from corpuscore.vectorstores import QdrantLocalVectorStore
 
 
 class KeywordEmbedding:
@@ -67,7 +67,7 @@ class OfflineEndToEndTests(unittest.TestCase):
             (documents / "install.txt").write_text(
                 "Installation guide for the local package.", encoding="utf-8"
             )
-            config = RagConfig(
+            config = CorpusConfig(
                 embedding=EmbeddingConfig(dimension=3),
                 sparse_embedding=SparseEmbeddingConfig(),
                 vector_store=VectorStoreConfig(path=str(root / "qdrant")),
@@ -112,7 +112,7 @@ class OfflineEndToEndTests(unittest.TestCase):
             (documents / "upgrade.txt").write_text(
                 "升级说明\n\nUpgrade after making a backup.", encoding="utf-8"
             )
-            config = RagConfig(
+            config = CorpusConfig(
                 embedding=EmbeddingConfig(dimension=3),
                 vector_store=VectorStoreConfig(path=str(root / "qdrant")),
                 ingestion=IngestionConfig(commit_batch_size=1),
@@ -152,7 +152,7 @@ class OfflineEndToEndTests(unittest.TestCase):
             removed = documents / "removed.txt"
             first.write_text("original content", encoding="utf-8")
             removed.write_text("remove this content", encoding="utf-8")
-            config = RagConfig(
+            config = CorpusConfig(
                 embedding=EmbeddingConfig(dimension=3),
                 vector_store=VectorStoreConfig(path=str(root / "qdrant")),
                 chunk_profiles={
@@ -205,7 +205,7 @@ class OfflineEndToEndTests(unittest.TestCase):
             documents.mkdir()
             path = documents / "source.txt"
             path.write_text("healthy", encoding="utf-8")
-            config = RagConfig(
+            config = CorpusConfig(
                 embedding=EmbeddingConfig(dimension=3),
                 vector_store=VectorStoreConfig(path=str(root / "qdrant")),
                 chunk_profiles={

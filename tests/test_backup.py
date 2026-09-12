@@ -8,16 +8,16 @@ from unittest.mock import Mock
 
 from qdrant_client import AsyncQdrantClient, QdrantClient
 
-from offline_rag.backup import read_server_backup, restore_local_backup
-from offline_rag.contracts.chunks import Chunk
-from offline_rag.contracts.indexing import (
+from corpuscore.backup import read_server_backup, restore_local_backup
+from corpuscore.contracts.chunks import Chunk
+from corpuscore.contracts.indexing import (
     DistanceMetric,
     EmbeddingSpecification,
     IndexSpecification,
     VectorRecord,
 )
-from offline_rag.contracts.retrieval import SearchRequest
-from offline_rag.vectorstores import (
+from corpuscore.contracts.retrieval import SearchRequest
+from corpuscore.vectorstores import (
     QdrantLocalVectorStore,
     QdrantServerVectorStore,
     chunk_to_payload,

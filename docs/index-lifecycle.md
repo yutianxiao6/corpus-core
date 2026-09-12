@@ -9,10 +9,10 @@
 - `unchanged`：不解析、不向量化，记录为 skipped。
 - `missing`：按配置删除向量和 journal 状态。
 
-完整重建写入唯一 staging collection。只有导入无失败、point 数与报告 chunk 数一致时才原子切换 active alias。上一 collection 不删除，可用 `rag-index activate <physical-collection>` 回滚；alias 与 journal 快照会一起切换。
+完整重建写入唯一 staging collection。只有导入无失败、point 数与报告 chunk 数一致时才原子切换 active alias。上一 collection 不删除，可用 `corpus-index activate <physical-collection>` 回滚；alias 与 journal 快照会一起切换。
 
 ```bash
-rag-index --config rag.yaml rebuild ./documents --json
-rag-index --config rag.yaml sync ./documents --json
-rag-index --config rag.yaml activate documents_active__<version>
+corpus-index --config corpus.yaml rebuild ./documents --json
+corpus-index --config corpus.yaml sync ./documents --json
+corpus-index --config corpus.yaml activate documents_active__<version>
 ```

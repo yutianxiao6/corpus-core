@@ -12,7 +12,7 @@
 使用 CLI 在指定 profile 上运行：
 
 ```bash
-rag-index --config rag.yaml evaluate eval.jsonl \
+corpus-index --config corpus.yaml evaluate eval.jsonl \
   --profile balanced --k 8 \
   --min-recall 0.90 --min-mrr 0.75 --json
 ```
@@ -22,7 +22,7 @@ rag-index --config rag.yaml evaluate eval.jsonl \
 Python API：
 
 ```python
-from offline_rag.evaluation import RetrievalEvaluator, assert_thresholds, load_examples
+from corpuscore.evaluation import RetrievalEvaluator, assert_thresholds, load_examples
 
 examples = load_examples("eval.jsonl")
 evaluator = RetrievalEvaluator(

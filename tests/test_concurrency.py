@@ -6,8 +6,8 @@ import time
 import unittest
 from collections.abc import Sequence
 
-from offline_rag.concurrency import AsyncMicroBatcher
-from offline_rag.exceptions import ConcurrentAccessError
+from corpuscore.concurrency import AsyncMicroBatcher
+from corpuscore.exceptions import ConcurrentAccessError
 
 
 class AsyncMicroBatcherTests(unittest.IsolatedAsyncioTestCase):

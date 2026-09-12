@@ -4,12 +4,12 @@ import unittest
 
 import httpx
 
-from offline_rag.cli import _serve, build_parser
-from offline_rag.config.models import RagConfig
-from offline_rag.contracts.chunks import Chunk
-from offline_rag.contracts.retrieval import QueryOverrides, RetrievalCandidate, RetrievalResult
-from offline_rag.exceptions import ConcurrentAccessError, ConfigurationError
-from offline_rag.http_service import create_app
+from corpuscore.cli import _serve, build_parser
+from corpuscore.config.models import CorpusConfig
+from corpuscore.contracts.chunks import Chunk
+from corpuscore.contracts.retrieval import QueryOverrides, RetrievalCandidate, RetrievalResult
+from corpuscore.exceptions import ConcurrentAccessError, ConfigurationError
+from corpuscore.http_service import create_app
 
 
 def retrieval_result(query: str) -> RetrievalResult:
@@ -75,7 +75,7 @@ class EngineFixture:
 class HttpServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_factory_engine_is_closed_with_application_lifespan(self) -> None:
         engine = EngineFixture()
-        app = create_app(RagConfig(), engine_factory=lambda _config: engine)
+        app = create_app(CorpusConfig(), engine_factory=lambda _config: engine)
 
         async with app.router.lifespan_context(app):
             self.assertFalse(engine.closed)
@@ -84,7 +84,7 @@ class HttpServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_query_serialization_overrides_and_request_id(self) -> None:
         engine = EngineFixture()
-        app = create_app(RagConfig(), engine=engine)
+        app = create_app(CorpusConfig(), engine=engine)
         async with app.router.lifespan_context(app):
             transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
             async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -108,7 +108,7 @@ class HttpServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_bearer_auth_and_batch_limit(self) -> None:
         engine = EngineFixture()
-        app = create_app(RagConfig(), engine=engine, bearer_token="secret", maximum_batch_size=2)
+        app = create_app(CorpusConfig(), engine=engine, bearer_token="secret", maximum_batch_size=2)
         async with app.router.lifespan_context(app):
             transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
             async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -127,7 +127,7 @@ class HttpServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_queue_saturation_maps_to_429(self) -> None:
         engine = EngineFixture()
         engine.fail = True
-        app = create_app(RagConfig(), engine=engine)
+        app = create_app(CorpusConfig(), engine=engine)
         async with app.router.lifespan_context(app):
             transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
             async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -140,7 +140,7 @@ class HttpServiceTests(unittest.IsolatedAsyncioTestCase):
         args = build_parser().parse_args(["serve", "--host", "0.0.0.0"])
         self.assertEqual(args.command, "serve")
         with self.assertRaises(ConfigurationError):
-            _serve(RagConfig(), host="0.0.0.0", port=8000, bearer_token_env=None)
+            _serve(CorpusConfig(), host="0.0.0.0", port=8000, bearer_token_env=None)
 
 
 if __name__ == "__main__":

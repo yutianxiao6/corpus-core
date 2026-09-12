@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from offline_rag.contracts.retrieval import SearchHit
-from offline_rag.retrieval import normalized_weighted_fusion, reciprocal_rank_fusion
+from corpuscore.contracts.retrieval import SearchHit
+from corpuscore.retrieval import normalized_weighted_fusion, reciprocal_rank_fusion
 
 
 def hit(chunk_id: str, score: float) -> SearchHit:

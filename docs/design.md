@@ -1,4 +1,4 @@
-# Offline RAG Retriever 详细设计
+# CorpusCore 详细设计
 
 状态：Draft  
 版本：0.1  
@@ -6,13 +6,13 @@
 
 ## 1. 文档目的
 
-本文定义 Offline RAG Retriever 的产品边界、核心抽象、数据协议、索引流程、查询流程、配置系统、扩展机制、并发模型、离线交付方式以及验收标准。
+本文定义 CorpusCore 的产品边界、核心抽象、数据协议、索引流程、查询流程、配置系统、扩展机制、并发模型、离线交付方式以及验收标准。
 
 本文首先解决架构和接口稳定性问题。在数据协议与扩展边界确认之前，不开始大规模实现，避免把 LangChain、Qdrant 或特定解析库的接口泄露到整个代码库中。
 
 ## 2. 产品定位
 
-Offline RAG Retriever 是一个可嵌入其他 Python 应用的检索引擎，而不是完整问答产品、SaaS 平台或带界面的知识库系统。
+CorpusCore 是一个可嵌入其他 Python 应用的检索引擎，而不是完整问答产品、SaaS 平台或带界面的知识库系统。
 
 它应当完成以下工作：
 
@@ -107,7 +107,7 @@ CLI 与未来可选的 HTTP 服务均调用 `RetrievalEngine`，不能复制业�
 
 ### 6.1 Python 包
 
-包名暂定为 `offline_rag`，提供：
+包名为 `corpuscore`，提供：
 
 - `RetrievalEngine`
 - `IndexManager`
@@ -118,7 +118,7 @@ CLI 与未来可选的 HTTP 服务均调用 `RetrievalEngine`，不能复制业�
 
 ### 6.2 索引 CLI
 
-命令暂定为 `rag-index`，用于初始化、预览、导入、同步、验证、检查和备份。
+命令暂定为 `corpus-index`，用于初始化、预览、导入、同步、验证、检查和备份。
 
 ### 6.3 LangChain 适配器
 
@@ -126,18 +126,18 @@ CLI 与未来可选的 HTTP 服务均调用 `RetrievalEngine`，不能复制业�
 
 ### 6.4 可选查询服务适配器
 
-提供可选 FastAPI 薄适配层和 `rag-index serve` 单进程入口，但它不属于核心检索逻辑。适配层复用原生 async/batch API，提供生命周期管理、请求 ID、批量上限、稳定错误映射及可选 Bearer 鉴权；公司也可以直接在自己的 FastAPI、Django 或任务进程中引用 Python 包。多进程服务必须使用 Qdrant Server。
+提供可选 FastAPI 薄适配层和 `corpus-index serve` 单进程入口，但它不属于核心检索逻辑。适配层复用原生 async/batch API，提供生命周期管理、请求 ID、批量上限、稳定错误映射及可选 Bearer 鉴权；公司也可以直接在自己的 FastAPI、Django 或任务进程中引用 Python 包。多进程服务必须使用 Qdrant Server。
 
 ## 7. 推荐项目结构
 
 ```text
-offline-rag/
+corpus-core/
 ├── docs/
 │   ├── design.md
 │   ├── configuration.md
 │   ├── plugin-development.md
 │   └── deployment.md
-├── src/offline_rag/
+├── src/corpuscore/
 │   ├── api/
 │   │   ├── engine.py
 │   │   └── options.py
@@ -196,9 +196,9 @@ offline-rag/
 ### 8.1 初始化
 
 ```python
-from offline_rag import RetrievalEngine
+from corpuscore import RetrievalEngine
 
-engine = RetrievalEngine.from_config("rag.yaml")
+engine = RetrievalEngine.from_yaml("corpus.yaml")
 ```
 
 初始化行为：
@@ -453,7 +453,7 @@ class ResultOrganizer(Protocol):
 第三方插件通过 Python package entry points 注册，例如：
 
 ```toml
-[project.entry-points."offline_rag.chunkers"]
+[project.entry-points."corpuscore.chunkers"]
 company_manual = "company_plugin:CompanyManualChunker"
 ```
 
@@ -468,12 +468,12 @@ company_manual = "company_plugin:CompanyManualChunker"
 1. Python API 显式参数。
 2. CLI 参数。
 3. manifest 中的单文件配置。
-4. 文件旁的 `filename.ext.rag.yaml`。
+4. 文件旁的 `filename.ext.corpus.yaml`。
 5. routing 规则。
 6. profile 配置。
 7. 全局默认值。
 
-最终生效配置必须能够通过 `rag-index explain-config <file>` 输出。
+最终生效配置必须能够通过 `corpus-index explain-config <file>` 输出。
 
 ### 11.2 完整配置示例
 
@@ -661,7 +661,7 @@ organizers:
 ### 12.1 目录导入
 
 ```bash
-rag-index build ./documents --recursive
+corpus-index build ./documents --recursive
 ```
 
 扫描器必须处理：
@@ -678,7 +678,7 @@ rag-index build ./documents --recursive
 ### 12.2 显式文件导入
 
 ```bash
-rag-index build docs/*.pdf manuals/**/*.md
+corpus-index build docs/*.pdf manuals/**/*.md
 ```
 
 shell 未展开的 glob 由 CLI 自己处理，以确保 Windows 与 Linux 行为一致。
@@ -1179,7 +1179,7 @@ Local 模式适合单进程开发和 CLI。一个进程内必须复用同一 cli
 ### 25.1 初始化
 
 ```bash
-rag-index init [target-directory]
+corpus-index init [target-directory]
 ```
 
 生成示例配置和标准目录，不下载模型。
@@ -1187,8 +1187,8 @@ rag-index init [target-directory]
 ### 25.2 预览
 
 ```bash
-rag-index preview ./documents
-rag-index preview manual.pdf --profile parent_child --show-content
+corpus-index preview ./documents
+corpus-index preview manual.pdf --profile parent_child --show-content
 ```
 
 输出文件数、解析错误、切片数量、长度分布、过短/超长切片和抽样内容，不写向量库。
@@ -1196,9 +1196,9 @@ rag-index preview manual.pdf --profile parent_child --show-content
 ### 25.3 构建与同步
 
 ```bash
-rag-index build ./documents
-rag-index sync ./documents
-rag-index rebuild ./documents
+corpus-index build ./documents
+corpus-index sync ./documents
+corpus-index rebuild ./documents
 ```
 
 `build` 创建新索引；`sync` 增量同步 active 索引；`rebuild` 创建 staging 索引并切换。
@@ -1206,11 +1206,11 @@ rag-index rebuild ./documents
 ### 25.4 诊断
 
 ```bash
-rag-index validate
-rag-index stats
-rag-index inspect --source manual.pdf
-rag-index explain-config manual.pdf
-rag-index doctor
+corpus-index validate
+corpus-index stats
+corpus-index inspect --source manual.pdf
+corpus-index explain-config manual.pdf
+corpus-index doctor
 ```
 
 `doctor` 检查本地模型文件、依赖、设备、磁盘空间、索引指纹、数据库连接和离线设置。
@@ -1218,8 +1218,8 @@ rag-index doctor
 ### 25.5 查询调试
 
 ```bash
-rag-index query "安装要求是什么" --profile balanced
-rag-index query "ERR-1042" --organizer debug --json
+corpus-index query "安装要求是什么" --profile balanced
+corpus-index query "ERR-1042" --organizer debug --json
 ```
 
 该命令用于验证检索，不代替上层问答 AI。
@@ -1227,20 +1227,20 @@ rag-index query "ERR-1042" --organizer debug --json
 ### 25.6 备份和版本
 
 ```bash
-rag-index versions
-rag-index activate <index-version>
-rag-index backup ./backups/index.snapshot
-rag-index restore ./backups/index.snapshot
+corpus-index versions
+corpus-index activate <index-version>
+corpus-index backup ./backups/index.snapshot
+corpus-index restore ./backups/index.snapshot
 ```
 
 破坏性命令需要显式确认；自动化场景通过 `--yes` 明确选择。
 
 ## 26. 错误模型
 
-所有公共异常继承 `OfflineRagError`，首批类型：
+所有公共异常继承 `CorpusCoreError`，首批类型：
 
 - `ConfigurationError`
-- `OfflineResourceMissingError`
+- `LocalResourceMissingError`
 - `UnsupportedDocumentError`
 - `DocumentLoadError`
 - `DocumentParseError`
@@ -1262,7 +1262,7 @@ rag-index restore ./backups/index.snapshot
 建议提供：
 
 ```text
-offline-rag-bundle/
+corpuscore-bundle/
 ├── wheelhouse/
 ├── models/
 │   ├── Qwen3-Embedding-0.6B/
@@ -1277,10 +1277,10 @@ offline-rag-bundle/
 Python 包按功能拆分 extras：
 
 ```text
-offline-rag[qdrant,pdf,docx]
-offline-rag[ocr]
-offline-rag[code]
-offline-rag[all]
+corpuscore[qdrant,pdf,docx]
+corpuscore[ocr]
+corpuscore[code]
+corpuscore[all]
 ```
 
 ### 27.2 离线强制规则

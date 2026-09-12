@@ -9,11 +9,11 @@ from unittest.mock import patch
 from openpyxl import Workbook
 from pptx import Presentation
 
-from offline_rag.contracts.documents import ContentBlockType, LoadedContent
-from offline_rag.loaders import ExcelLoader, PowerPointLoader
-from offline_rag.parsers import PptxParser, XlsxParser
-from offline_rag.parsers.ocr import OcrPdfParser
-from offline_rag.sources import FileSystemSourceProvider
+from corpuscore.contracts.documents import ContentBlockType, LoadedContent
+from corpuscore.loaders import ExcelLoader, PowerPointLoader
+from corpuscore.parsers import PptxParser, XlsxParser
+from corpuscore.parsers.ocr import OcrPdfParser
+from corpuscore.sources import FileSystemSourceProvider
 
 
 def source_for(path: Path):  # type: ignore[no-untyped-def]

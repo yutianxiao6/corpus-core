@@ -4,13 +4,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from offline_rag.config import deep_merge, load_config, parse_cli_overrides
-from offline_rag.exceptions import ConfigurationError
+from corpuscore.config import deep_merge, load_config, parse_cli_overrides
+from corpuscore.exceptions import ConfigurationError
 
 
 class ConfigurationTests(unittest.TestCase):
     def _write(self, directory: str, content: str) -> Path:
-        path = Path(directory) / "rag.yaml"
+        path = Path(directory) / "corpus.yaml"
         path.write_text(content, encoding="utf-8")
         return path
 

@@ -3,19 +3,19 @@ from __future__ import annotations
 import unittest
 from collections.abc import Sequence
 
-from offline_rag.contracts.chunks import Chunk
-from offline_rag.contracts.indexing import EmbeddingSpecification
-from offline_rag.contracts.retrieval import (
+from corpuscore.contracts.chunks import Chunk
+from corpuscore.contracts.indexing import EmbeddingSpecification
+from corpuscore.contracts.retrieval import (
     RetrievalOptions,
     RetrievalRequest,
     SearchHit,
     SearchRequest,
     SearchVector,
 )
-from offline_rag.embeddings import HashedLexicalSparseEmbedding
-from offline_rag.ports import Vector
-from offline_rag.retrieval import HybridRetrievalStrategy
-from offline_rag.vectorstores import chunk_to_payload
+from corpuscore.embeddings import HashedLexicalSparseEmbedding
+from corpuscore.ports import Vector
+from corpuscore.retrieval import HybridRetrievalStrategy
+from corpuscore.vectorstores import chunk_to_payload
 
 
 class DenseFixture:

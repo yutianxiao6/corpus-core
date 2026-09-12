@@ -4,18 +4,18 @@ import unittest
 from collections.abc import Sequence
 from dataclasses import replace
 
-from offline_rag.config.models import RagConfig, RerankerConfig, RetrievalProfile
-from offline_rag.contracts.chunks import Chunk
-from offline_rag.contracts.indexing import (
+from corpuscore.config.models import CorpusConfig, RerankerConfig, RetrievalProfile
+from corpuscore.contracts.chunks import Chunk
+from corpuscore.contracts.indexing import (
     DistanceMetric,
     EmbeddingSpecification,
     IndexSpecification,
 )
-from offline_rag.contracts.retrieval import RetrievalCandidate, SearchHit, SearchRequest
-from offline_rag.engine import OfflineRagEngine
-from offline_rag.exceptions import RerankerError
-from offline_rag.ports import Vector
-from offline_rag.vectorstores import chunk_to_payload
+from corpuscore.contracts.retrieval import RetrievalCandidate, SearchHit, SearchRequest
+from corpuscore.engine import RetrievalEngine
+from corpuscore.exceptions import RerankerError
+from corpuscore.ports import Vector
+from corpuscore.vectorstores import chunk_to_payload
 
 
 class EmbeddingFixture:
@@ -128,10 +128,8 @@ class AsyncOnlyReranker(ReverseReranker):
         return ReverseReranker.rerank(self, query, candidates, top_n=top_n)
 
 
-def make_engine(
-    *, failure_policy: str = "return_unranked"
-) -> tuple[OfflineRagEngine, StoreFixture]:
-    config = RagConfig(
+def make_engine(*, failure_policy: str = "return_unranked") -> tuple[RetrievalEngine, StoreFixture]:
+    config = CorpusConfig(
         retrieval_profiles={
             "precise": RetrievalProfile(
                 strategy="dense",
@@ -150,7 +148,7 @@ def make_engine(
     )
     embedding = EmbeddingFixture()
     store = StoreFixture()
-    engine = object.__new__(OfflineRagEngine)
+    engine = object.__new__(RetrievalEngine)
     engine.config = config
     engine.embedding = embedding  # type: ignore[assignment]
     engine.query_embedding = embedding  # type: ignore[assignment]

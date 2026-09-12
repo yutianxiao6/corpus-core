@@ -4,15 +4,15 @@ import json
 import unittest
 from unittest.mock import Mock
 
-from offline_rag.contracts.chunks import Chunk
-from offline_rag.contracts.retrieval import (
+from corpuscore.contracts.chunks import Chunk
+from corpuscore.contracts.retrieval import (
     Citation,
     QueryOverrides,
     RetrievalCandidate,
     RetrievalResult,
 )
-from offline_rag.engine import OfflineRagEngine
-from offline_rag.langchain import OfflineRagLangChainRetriever
+from corpuscore.engine import RetrievalEngine
+from corpuscore.langchain import CorpusCoreLangChainRetriever
 
 
 def native_result() -> RetrievalResult:
@@ -57,11 +57,11 @@ def native_result() -> RetrievalResult:
 
 class LangChainAdapterTests(unittest.IsolatedAsyncioTestCase):
     async def test_invoke_and_ainvoke_return_standard_serializable_documents(self) -> None:
-        engine = Mock(spec=OfflineRagEngine)
+        engine = Mock(spec=RetrievalEngine)
         engine.query.return_value = native_result()
         engine.aquery.return_value = native_result()
         overrides = QueryOverrides(filters={"metadata.department": "support"})
-        retriever = OfflineRagLangChainRetriever(
+        retriever = CorpusCoreLangChainRetriever(
             engine=engine,
             profile="balanced",
             overrides=overrides,
@@ -81,7 +81,7 @@ class LangChainAdapterTests(unittest.IsolatedAsyncioTestCase):
         engine.aquery.assert_awaited_once_with("退款", profile="balanced", overrides=overrides)
 
     async def test_engine_factory_validates_profile(self) -> None:
-        engine = object.__new__(OfflineRagEngine)
+        engine = object.__new__(RetrievalEngine)
         engine.config = Mock(retrieval_profiles={"fast": object()})
         retriever = engine.as_langchain_retriever(profile="fast")
         self.assertIs(retriever.engine, engine)
