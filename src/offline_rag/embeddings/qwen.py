@@ -20,7 +20,7 @@ class _SentenceModel(Protocol):
 
     def encode(self, inputs: Sequence[str] | str, **kwargs: object) -> object: ...
 
-    def tokenize(self, texts: list[str], **kwargs: object) -> Mapping[str, object]: ...
+    def preprocess(self, inputs: list[str], **kwargs: object) -> Mapping[str, object]: ...
 
 
 class QwenSentenceTransformerEmbedding:
@@ -115,7 +115,7 @@ class QwenSentenceTransformerEmbedding:
         if not text:
             return 0
         try:
-            tokenized = self._get_model().tokenize([text])
+            tokenized = self._get_model().preprocess([text])
             input_ids = tokenized["input_ids"]
             shape = getattr(input_ids, "shape", None)
             if shape is not None:

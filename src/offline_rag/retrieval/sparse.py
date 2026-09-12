@@ -52,11 +52,10 @@ class SparseSimilarityStrategy:
     def _candidates(
         request: RetrievalRequest, hits: Sequence[SearchHit]
     ) -> tuple[RetrievalCandidate, ...]:
-        threshold = request.options.score_threshold
         candidates: list[RetrievalCandidate] = []
         seen: set[str] = set()
         for hit in sorted(hits, key=lambda item: item.score, reverse=True):
-            if hit.chunk_id in seen or (threshold is not None and hit.score < threshold):
+            if hit.chunk_id in seen:
                 continue
             seen.add(hit.chunk_id)
             candidates.append(

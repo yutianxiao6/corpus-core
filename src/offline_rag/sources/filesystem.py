@@ -118,14 +118,19 @@ class FileSystemSourceProvider:
         if self._explicit_root is not None:
             return self._explicit_root
         if len(self._inputs) == 1 and not glob.has_magic(self._inputs[0]):
-            only = candidates[0].absolute()
-            return only.resolve() if only.is_dir() else only.parent.resolve()
+            only = candidates[0].resolve()
+            return only if only.is_dir() else only.parent
         return Path.cwd().resolve()
 
     def _iter_files(self, candidates: Sequence[Path], root: Path) -> Iterator[Path]:
         visited_directories: set[tuple[int, int]] = set()
         for candidate in candidates:
-            absolute = candidate.absolute()
+            # Resolve every candidate using the same representation as ``root``.
+            # On Windows, TEMP and glob APIs may return DOS 8.3 paths (for example
+            # ``ADMINI~1``) while ``Path.resolve`` expands the configured root to
+            # its long form. Mixing those representations makes ``relative_to``
+            # fail and used to collapse nested paths to their basename.
+            absolute = candidate.resolve()
             if absolute.is_symlink() and not self._options.follow_symlinks:
                 continue
             if absolute.is_file():
@@ -188,9 +193,20 @@ class FileSystemSourceProvider:
 
     def _relative_path(self, path: Path, root: Path) -> str:
         try:
-            relative = path.absolute().relative_to(root)
-        except ValueError:
-            relative = Path(path.name)
+            relative = path.resolve().relative_to(root.resolve())
+        except (OSError, ValueError) as exc:
+            # An in-root symlink may intentionally resolve outside the root. Use
+            # its lexical path for ignore/hidden matching; the separate symlink
+            # policy check decides whether traversal is allowed.
+            try:
+                if not path.is_symlink():
+                    raise ValueError from exc
+                relative = path.absolute().relative_to(root)
+            except (OSError, ValueError) as lexical_exc:
+                raise SourceDiscoveryError(
+                    f"discovered path is outside the configured root: {path}",
+                    details={"path": str(path), "root": str(root)},
+                ) from lexical_exc
         return PurePosixPath(relative).as_posix()
 
     def _is_included(self, relative_path: str, path: Path) -> bool:
@@ -255,7 +271,7 @@ class FileSystemSourceProvider:
         source_metadata.update({"filename": path.name, "extension": path.suffix.lower()})
         return SourceDescriptor(
             source_id=source_id,
-            uri=path.absolute().as_uri(),
+            uri=path.resolve().as_uri(),
             relative_path=relative_path,
             media_type=None,
             size_bytes=after.st_size,

@@ -584,6 +584,10 @@ class IngestionService:
                 return rule.use
         if extension in (".md", ".markdown") and "markdown_heading" in self._config.chunk_profiles:
             return "markdown_heading"
+        if extension in (".csv", ".xlsx", ".xlsm") and "table_rows" in self._config.chunk_profiles:
+            return "table_rows"
+        if extension in (".pdf", ".pptx") and "page_aware" in self._config.chunk_profiles:
+            return "page_aware"
         if extension in CODE_EXTENSIONS and "source_code" in self._config.chunk_profiles:
             return "source_code"
         return "default"
@@ -604,8 +608,11 @@ def build_index_specification(
     embedding: EmbeddingSpecification,
     sparse_embedding: SparseEmbeddingProvider | None = None,
 ) -> IndexSpecification:
-    dumped = config.model_dump(mode="json")["chunk_profiles"]
-    chunking = cast(Mapping[str, JSONValue], dumped)
+    dumped = config.model_dump(mode="json")
+    chunking = cast(
+        Mapping[str, JSONValue],
+        {"profiles": dumped["chunk_profiles"], "routing": dumped["routing"]},
+    )
     return IndexSpecification(
         index_format_version=1,
         payload_schema_version=1,

@@ -11,6 +11,7 @@ from offline_rag.config.models import (
     RouteMatch,
     RoutingRule,
 )
+from offline_rag.contracts.documents import SourceDescriptor
 from offline_rag.exceptions import ConfigurationError
 from offline_rag.ingestion import IngestionService
 from offline_rag.sources import DiscoveryOptions, ManifestSourceProvider, apply_sidecar
@@ -84,6 +85,26 @@ documents:
 
 
 class SidecarAndRoutingTests(unittest.TestCase):
+    def test_structured_formats_use_specialized_default_profiles(self) -> None:
+        service = IngestionService(RagConfig())
+        expectations = {
+            "report.xlsx": "table_rows",
+            "data.csv": "table_rows",
+            "slides.pptx": "page_aware",
+            "manual.pdf": "page_aware",
+            "readme.md": "markdown_heading",
+            "tool.py": "source_code",
+        }
+        for relative_path, expected in expectations.items():
+            source = SourceDescriptor(
+                source_id=f"source-{relative_path}",
+                uri=f"file:///{relative_path}",
+                relative_path=relative_path,
+                content_hash="fixture",
+            )
+            with self.subTest(relative_path=relative_path):
+                self.assertEqual(service._profile_for(source), expected)
+
     def test_sidecar_adds_profile_and_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

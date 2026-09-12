@@ -55,7 +55,7 @@ def make_hit(chunk_id: str, score: float) -> SearchHit:
 
 
 class DenseRetrievalTests(unittest.IsolatedAsyncioTestCase):
-    async def test_threshold_dedup_ranking_limits_and_async_parity(self) -> None:
+    async def test_strategy_defers_threshold_dedupes_and_preserves_async_parity(self) -> None:
         hits = [make_hit("low", 0.2), make_hit("best", 0.9), make_hit("best", 0.8)]
         store = FakeStore(hits)
         strategy = DenseSimilarityStrategy(FakeEmbedding(), store, fetch_k=10)
@@ -73,7 +73,9 @@ class DenseRetrievalTests(unittest.IsolatedAsyncioTestCase):
         sync_result = strategy.retrieve(request)
         async_result = await strategy.aretrieve(request)
 
-        self.assertEqual([item.chunk.chunk_id for item in sync_result], ["best"])
+        # Thresholding belongs to the post-rerank pipeline. Retrieval strategies
+        # must preserve low-scoring recall candidates for a reranker to promote.
+        self.assertEqual([item.chunk.chunk_id for item in sync_result], ["best", "low"])
         self.assertEqual(sync_result[0].rank, 1)
         self.assertEqual(sync_result[0].dense_score, 0.9)
         self.assertEqual(sync_result[0].origins, ["dense"])

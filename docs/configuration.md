@@ -18,6 +18,10 @@ config = load_config(
 
 YAML 使用安全加载器，重复 key、未知字段、不支持的版本和不存在的 profile 引用都会抛出 `ConfigurationError`。
 
+配置中的本地相对路径以 `rag.yaml` 所在目录为基准，而不是运行命令时的当前目录。适用字段包括 runtime work/cache 目录、embedding 模型、Qdrant Local 数据目录和 reranker 模型目录。
+
+模型内容固定后，可把一次完整校验得到的 SHA-256 写入 `embedding.model_checksum`。之后启动会直接使用这个不可变指纹，避免每个短生命周期 CLI 进程重新读取整个模型目录；该字段必须是 64 位十六进制字符串，模型文件变化后必须同步更新。未配置时仍会完整计算，保持安全默认值。
+
 Query profile 是经过启动期校验的默认参数集合。Python `engine.retrieve(...)` 和 CLI `rag-index query` 可以逐调用覆盖 filters、organizer、final_k、score threshold、rerank 候选数、MMR、每文档上限及邻居距离；不能覆盖 embedding、sparse 编码、parser/chunker 或向量库等索引结构参数。
 
 完整字段示例见 [设计文档](design.md#112-完整配置示例)。
@@ -54,6 +58,22 @@ routing:
 ```
 
 语义切块会额外执行一轮 document embedding，导入耗时和显存占用高于递归切块。阈值必须通过目标公司的固定评测集校准；模型缺失、向量维度异常或推理失败会中止该文档，不会静默改用另一种边界。
+
+## 结构化格式默认切块
+
+内置配置会按格式选择专用切块器：Markdown 按标题、CSV/XLSX/XLSM 按单行并重复表头、PDF/PPTX 按页、源代码按语法边界。显式 routing 或 sidecar profile 仍具有更高优先级。逐行表格切块更适合精确字段和数字查询；如果数据行很短且查询偏汇总，可提高 `max_rows_per_chunk` 来减少向量数量。
+
+```yaml
+chunk_profiles:
+  table_rows:
+    type: table_rows
+    repeat_headers: true
+    max_rows_per_chunk: 1
+  page_aware:
+    type: page_aware
+    chunk_size: 1000
+    chunk_overlap: 100
+```
 
 ## 查询并发与模型微批
 

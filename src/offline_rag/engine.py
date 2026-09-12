@@ -72,6 +72,7 @@ class OfflineRagEngine:
             max_length=embedding_config.max_length,
             query_instruction=embedding_config.query_instruction,
             device=embedding_config.device,
+            model_checksum=embedding_config.model_checksum,
         )
         concurrency = config.query_concurrency
         self.query_embedding = QueuedEmbeddingProvider(

@@ -42,6 +42,7 @@ class EmbeddingConfig(StrictModel):
     provider: str = "qwen_sentence_transformers"
     model_path: str = "./models/Qwen3-Embedding-0.6B"
     model_revision: str | None = None
+    model_checksum: str | None = Field(default=None, pattern=r"^[0-9a-fA-F]{64}$")
     device: str = "auto"
     dimension: int = Field(default=1024, gt=0)
     normalize: bool = True
@@ -275,6 +276,10 @@ def _default_chunk_profiles() -> dict[str, ChunkProfile]:
     return {
         "default": RecursiveChunkProfile(type="recursive"),
         "markdown_heading": HeadingRecursiveChunkProfile(type="heading_recursive"),
+        "page_aware": PageAwareChunkProfile(type="page_aware"),
+        "table_rows": TableRowsChunkProfile(
+            type="table_rows", repeat_headers=True, max_rows_per_chunk=1
+        ),
         "source_code": SyntaxChunkProfile(type="syntax"),
     }
 

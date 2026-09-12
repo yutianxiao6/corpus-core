@@ -61,8 +61,10 @@ class BackupTests(unittest.TestCase):
                 store.ensure_index(specification())
                 store.upsert([VectorRecord("chunk-1", [1.0, 0.0], chunk_to_payload(chunk))])
                 manifest = store.backup(archive, index_fingerprint=specification().fingerprint())
+                live_hits = store.search(SearchRequest([1.0, 0.0], limit=1))
 
             self.assertEqual(manifest["mode"], "local")
+            self.assertEqual(live_hits[0].chunk_id, "chunk-1")
             restored_manifest = restore_local_backup(
                 archive,
                 restored,

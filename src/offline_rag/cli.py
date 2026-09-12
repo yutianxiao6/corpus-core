@@ -217,6 +217,7 @@ def _preview(
             max_length=settings.max_length,
             query_instruction=settings.query_instruction,
             device=settings.device,
+            model_checksum=settings.model_checksum,
         )
     report = IngestionService(
         config,

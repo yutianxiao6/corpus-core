@@ -558,7 +558,7 @@ chunk_profiles:
   table_rows:
     type: table_rows
     repeat_headers: true
-    max_rows_per_chunk: 10
+    max_rows_per_chunk: 1
 
   source_code:
     type: syntax

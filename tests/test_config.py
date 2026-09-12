@@ -33,6 +33,43 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(config.runtime.log_level, "DEBUG")
         self.assertTrue(config.runtime.offline)
 
+    def test_filesystem_paths_are_relative_to_configuration_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config_path = self._write(
+                directory,
+                "runtime:\n  work_dir: ./state\n  cache_dir: ./cache\n"
+                "embedding:\n  model_path: ./models/embedding\n"
+                "vector_store:\n  path: ./vectors\n"
+                "rerankers:\n  local:\n    model_path: ./models/reranker\n",
+            )
+            config = load_config(config_path)
+
+        self.assertEqual(Path(config.runtime.work_dir), (root / "state").resolve())
+        self.assertEqual(Path(config.runtime.cache_dir), (root / "cache").resolve())
+        self.assertEqual(Path(config.embedding.model_path), (root / "models/embedding").resolve())
+        self.assertEqual(Path(config.vector_store.path or ""), (root / "vectors").resolve())
+        self.assertEqual(
+            Path(config.rerankers["local"].model_path), (root / "models/reranker").resolve()
+        )
+
+    def test_embedding_checksum_must_be_sha256(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            valid = self._write(
+                directory,
+                f"embedding:\n  model_checksum: {'a' * 64}\n",
+            )
+            self.assertEqual(load_config(valid).embedding.model_checksum, "a" * 64)
+            invalid = self._write(directory, "embedding:\n  model_checksum: short\n")
+            with self.assertRaises(ConfigurationError):
+                load_config(invalid)
+
+    def test_default_chunk_profiles_include_structured_formats(self) -> None:
+        config = load_config()
+        self.assertEqual(config.chunk_profiles["table_rows"].type, "table_rows")
+        self.assertEqual(config.chunk_profiles["table_rows"].max_rows_per_chunk, 1)
+        self.assertEqual(config.chunk_profiles["page_aware"].type, "page_aware")
+
     def test_unknown_fields_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = self._write(directory, "runtime:\n  log_lvel: INFO\n")

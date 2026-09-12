@@ -79,10 +79,13 @@ class CliTests(unittest.TestCase):
         self.assertGreaterEqual(data["chunk_count"], 2)
 
     def test_doctor_fails_when_local_model_is_missing(self) -> None:
-        output = io.StringIO()
-        with contextlib.redirect_stdout(output):
-            exit_code = main(["doctor"])
-        data = json.loads(output.getvalue())
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "rag.yaml"
+            config.write_text("embedding:\n  model_path: ./missing-model\n", encoding="utf-8")
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                exit_code = main(["--config", str(config), "doctor"])
+            data = json.loads(output.getvalue())
 
         self.assertEqual(exit_code, 1)
         self.assertFalse(data["ok"])

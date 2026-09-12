@@ -17,9 +17,10 @@ documents/
 models/
 logs/
 backups/
+benchmark_corpus/
 *.log
+*.before-*
 
 # Local configuration may contain deployment-specific secrets or paths.
 rag.local.yaml
 .env
-

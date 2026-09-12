@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from dataclasses import replace
 
+from offline_rag.config.models import RagConfig, RouteMatch, RoutingRule
 from offline_rag.contracts.indexing import (
     DistanceMetric,
     EmbeddingSpecification,
@@ -10,6 +11,7 @@ from offline_rag.contracts.indexing import (
 )
 from offline_rag.exceptions import IndexCompatibilityError
 from offline_rag.indexing import assert_index_compatible, compare_index_specs
+from offline_rag.ingestion import build_index_specification
 
 
 def make_specification() -> IndexSpecification:
@@ -38,6 +40,23 @@ def make_specification() -> IndexSpecification:
 
 
 class IndexCompatibilityTests(unittest.TestCase):
+    def test_routing_changes_are_part_of_index_fingerprint(self) -> None:
+        embedding = make_specification().embedding
+        first = build_index_specification(RagConfig(), embedding)
+        second = build_index_specification(
+            RagConfig(
+                routing=(
+                    RoutingRule(
+                        match=RouteMatch(extensions=(".txt",)),
+                        use="markdown_heading",
+                    ),
+                )
+            ),
+            embedding,
+        )
+
+        self.assertNotEqual(first.fingerprint(), second.fingerprint())
+
     def test_identical_specifications_are_compatible(self) -> None:
         specification = make_specification()
         self.assertEqual(compare_index_specs(specification, specification), ())

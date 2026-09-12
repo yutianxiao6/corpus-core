@@ -31,6 +31,20 @@ _DENSE_VECTOR_NAME = "dense"
 _SPARSE_VECTOR_NAME = "sparse"
 
 
+class _SharedLocalClient:
+    """Mutable client holder shared by the active store and collection views."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.lock: AbstractContextManager[object] = RLock()
+        self.client = QdrantClient(path=str(path))
+        self.closed = False
+
+    def reopen(self) -> None:
+        self.client = QdrantClient(path=str(self.path))
+        self.closed = False
+
+
 class QdrantLocalVectorStore:
     """Own one Qdrant Local client and serialize access inside this process."""
 
@@ -40,10 +54,29 @@ class QdrantLocalVectorStore:
         self._path = Path(path).expanduser().resolve()
         self._path.mkdir(parents=True, exist_ok=True)
         self._collection_name = collection_name
-        self._client = QdrantClient(path=str(self._path))
-        self._lock: AbstractContextManager[object] = RLock()
+        self._shared = _SharedLocalClient(self._path)
         self._owns_client = True
         self._sparse_enabled = False
+
+    @property
+    def _client(self) -> QdrantClient:
+        if hasattr(self, "_shared"):
+            return self._shared.client
+        return self.__standalone_client
+
+    @_client.setter
+    def _client(self, value: QdrantClient) -> None:
+        self.__standalone_client = value
+
+    @property
+    def _lock(self) -> AbstractContextManager[object]:
+        if hasattr(self, "_shared"):
+            return self._shared.lock
+        return self.__standalone_lock
+
+    @_lock.setter
+    def _lock(self, value: AbstractContextManager[object]) -> None:
+        self.__standalone_lock = value
 
     @property
     def collection_name(self) -> str:
@@ -132,15 +165,27 @@ class QdrantLocalVectorStore:
         *,
         index_fingerprint: str | None = None,
     ) -> dict[str, object]:
-        """Create a consistent archive while holding the Local client lock."""
+        """Create a consistent archive after flushing and closing local storage.
+
+        Qdrant Local does not implement snapshots. Closing the embedded client is
+        therefore required before copying its files, especially on Windows where
+        the storage lock cannot be read while the database is open. Collection
+        views share the mutable client holder and automatically use the reopened
+        client after the backup completes.
+        """
 
         with self._lock:
-            return create_local_backup(
-                self._path,
-                destination,
-                collection_name=self._collection_name,
-                index_fingerprint=index_fingerprint,
-            )
+            self._client.close()
+            self._shared.closed = True
+            try:
+                return create_local_backup(
+                    self._path,
+                    destination,
+                    collection_name=self._collection_name,
+                    index_fingerprint=index_fingerprint,
+                )
+            finally:
+                self._shared.reopen()
 
     def collection(self, collection_name: str) -> QdrantLocalVectorStore:
         """Return a non-owning view backed by this instance's single local client."""
@@ -150,8 +195,7 @@ class QdrantLocalVectorStore:
         view = object.__new__(QdrantLocalVectorStore)
         view._path = self._path
         view._collection_name = collection_name
-        view._client = self._client
-        view._lock = self._lock
+        view._shared = self._shared
         view._owns_client = False
         view._sparse_enabled = False
         return view
@@ -327,7 +371,12 @@ class QdrantLocalVectorStore:
     def close(self) -> None:
         if self._owns_client:
             with self._lock:
-                self._client.close()
+                if hasattr(self, "_shared") and not self._shared.closed:
+                    self._client.close()
+                    self._shared.closed = True
+                elif not hasattr(self, "_shared"):
+                    self._client.close()
+                    self._owns_client = False
 
     def __enter__(self) -> Self:
         return self

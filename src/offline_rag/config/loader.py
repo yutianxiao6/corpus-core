@@ -121,6 +121,8 @@ def load_config(
         data = deep_merge(data, cli_overrides)
     if api_overrides:
         data = deep_merge(data, api_overrides)
+    if path is not None:
+        data = _resolve_relative_paths(data, Path(path).expanduser().resolve().parent)
     try:
         return RagConfig.model_validate(data)
     except ValidationError as exc:
@@ -129,3 +131,31 @@ def load_config(
             "configuration validation failed",
             details={"errors": errors},
         ) from exc
+
+
+def _resolve_relative_paths(data: Mapping[str, Any], base_directory: Path) -> dict[str, Any]:
+    """Resolve filesystem settings relative to the YAML file, not process CWD."""
+
+    resolved = deepcopy(dict(data))
+
+    def rebase(mapping: object, key: str) -> None:
+        if not isinstance(mapping, dict):
+            return
+        value = mapping.get(key)
+        if not isinstance(value, str) or not value.strip():
+            return
+        candidate = Path(value).expanduser()
+        if not candidate.is_absolute():
+            candidate = base_directory / candidate
+        mapping[key] = str(candidate.resolve())
+
+    runtime = resolved.get("runtime")
+    rebase(runtime, "work_dir")
+    rebase(runtime, "cache_dir")
+    rebase(resolved.get("embedding"), "model_path")
+    rebase(resolved.get("vector_store"), "path")
+    rerankers = resolved.get("rerankers")
+    if isinstance(rerankers, dict):
+        for reranker in rerankers.values():
+            rebase(reranker, "model_path")
+    return resolved

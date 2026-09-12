@@ -21,8 +21,8 @@ class FakeSentenceModel:
         count = len(inputs) if isinstance(inputs, (list, tuple)) else 1
         return [[float(index) for index in range(self.dimension)] for _ in range(count)]
 
-    def tokenize(self, texts: list[str], **kwargs: object) -> dict[str, object]:
-        return {"input_ids": [[index for index, _ in enumerate(texts[0].split(), start=1)]]}
+    def preprocess(self, inputs: list[str], **kwargs: object) -> dict[str, object]:
+        return {"input_ids": [[index for index, _ in enumerate(inputs[0].split(), start=1)]]}
 
 
 class EmbeddingAdapterTests(unittest.TestCase):

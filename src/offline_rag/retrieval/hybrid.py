@@ -118,11 +118,8 @@ class HybridRetrievalStrategy:
     def _candidates(
         request: RetrievalRequest, hits: Sequence[FusedSearchHit]
     ) -> tuple[RetrievalCandidate, ...]:
-        threshold = request.options.score_threshold
         result: list[RetrievalCandidate] = []
         for hit in hits:
-            if threshold is not None and hit.score < threshold:
-                continue
             result.append(
                 RetrievalCandidate(
                     chunk=chunk_from_payload(hit.payload),
