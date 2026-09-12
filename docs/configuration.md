@@ -24,7 +24,7 @@ YAML 使用安全加载器，重复 key、未知字段、不支持的版本和�
 
 Query profile 是经过启动期校验的默认参数集合。Python `engine.retrieve(...)` 和 CLI `corpus-index query` 可以逐调用覆盖 filters、organizer、final_k、score threshold、rerank 候选数、MMR、每文档上限及邻居距离；不能覆盖 embedding、sparse 编码、parser/chunker 或向量库等索引结构参数。
 
-完整字段示例见 [设计文档](design.md#112-完整配置示例)。
+可运行 `corpus-index init <目录>` 生成包含全部默认字段的配置文件。
 
 ## 代码与实验性语义切块
 
